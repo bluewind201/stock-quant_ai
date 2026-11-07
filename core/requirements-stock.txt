@@ -1,0 +1,8 @@
+fastapi>=0.115.6,<1
+uvicorn>=0.34,<1
+requests>=2.32.3,<3
+exchange-calendars>=4.11,<5
+tzdata>=2025.2
+beautifulsoup4>=4.13,<5
+feedparser>=6.0.11,<7
+icalendar>=6.1,<8

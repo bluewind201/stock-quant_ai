@@ -1,0 +1,33 @@
+﻿# Toss Securities Open API Guide
+
+> Guide for external LLMs and AI coding agents consuming the Toss Securities Open API documentation. This is not a sitemap for search-engine crawling.
+
+Toss Securities Open API provides a REST API for Korean (KRX) and US stock market data (quotes, orderbook, trades), stock info, exchange rates, market calendars, accounts, holdings, and orders, plus a WebSocket API for realtime trade ticks, orderbook updates, and personal order events with declarative subscriptions.
+
+All APIs use an access token issued via OAuth 2.0 Client Credentials Grant. Account, asset, and order APIs require the `X-Tossinvest-Account` header in addition to `Authorization: Bearer {access_token}`. The WebSocket handshake uses the same access token as an `Authorization: Bearer` header.
+
+Base API server: `https://openapi.tossinvest.com`
+WebSocket server: `wss://openapi-ws.tossinvest.com/ws/v1`
+
+## Source of Truth
+
+- [Overview Markdown](https://openapi.tossinvest.com/openapi-docs/overview.md): Human-readable overview, quick start, endpoint groups, rate limits, error model, and the WebSocket integration guide.
+- [OpenAPI Markdown](https://openapi.tossinvest.com/openapi-docs/latest/api-reference/README.md): Markdown-converted API reference for LLM and AI coding agent consumption.
+- [OpenAPI JSON](https://openapi.tossinvest.com/openapi-docs/latest/openapi.json): Canonical server-owned OpenAPI 3.0 document. Use this as the source of truth for endpoints, schemas, request/response examples, authentication, errors, and rate limits.
+- [AsyncAPI JSON](https://openapi.tossinvest.com/openapi-docs/latest/asyncapi.json): Canonical AsyncAPI 3.0 document for the realtime WebSocket API. Use this as the source of truth for WebSocket channels, subscription declarations, message schemas and examples, connection limits, keepalive, and reconnect semantics.
+
+## Human Documentation
+
+- [Interactive API Reference](/docs): Browser-based API reference.
+
+## API Coverage
+
+The following list is for quick orientation only. The OpenAPI JSON above is always the source of truth for available APIs and their exact behavior.
+
+- Auth: OAuth2 token issuance and JWKS.
+- Market Data: orderbook, prices, trades, price limits, candles.
+- Stock Info: stock master data and stock warnings.
+- Market Info: exchange rate and KR/US market calendar.
+- Account and Asset: accounts and holdings.
+- Order: create, modify, cancel, list, detail, buying power, sellable quantity, commissions.
+- Realtime (WebSocket): live trade ticks, orderbook updates, and personal order events over `wss://openapi-ws.tossinvest.com/ws/v1` with declarative subscriptions. See AsyncAPI JSON above.

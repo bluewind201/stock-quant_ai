@@ -1,0 +1,47 @@
+# 실제 키가 들어가는 파일. 템플릿은 .env.stock.example 을 쓴다.
+.env
+.env.stock
+
+# 로컬 실행 산출물
+stock-data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# 파이썬 / 노드
+__pycache__/
+*.pyc
+.venv-stock/
+.uv-stock-cache/
+.pytest_cache/
+node_modules/
+dist/
+
+# Credentials and local configuration
+.env.*
+!.env.example
+auth.json
+credentials.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Build archives, local test output and research data
+*.tar
+*.tar.gz
+*.zip
+*.log
+*.sqlite*
+*.db
+.venv/
+.uv-cache/
+verification/toss/
+backtest/history/
+backtest/results/
+
+# Unrelated local migration notes
+portunus 이전.md
+
+# Archived verification workspaces
+verification/*/

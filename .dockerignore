@@ -1,0 +1,22 @@
+# .env 계열은 예외 없이 전부 빌드 컨텍스트에서 제외한다.
+# 예전에 `!.env.example` 로 하나만 되살렸다가 실제 키가 채워지는 바람에
+# 시크릿이 이미지에 들어갈 뻔했다. 예외를 다시 만들지 말 것.
+.env
+.env.*
+
+# 실행 산출물 · 로컬 전용
+.git
+.backup
+stock-data
+backtest
+verification
+*.sqlite3
+*.sqlite3-*
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.venv*
+.uv-stock-cache
+.uv-cache
+.pytest_cache

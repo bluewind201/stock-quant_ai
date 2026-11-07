@@ -1,0 +1,6 @@
+# Development only; NAS uses the published image in docker-compose.yml.
+services:
+  stock:
+    build:
+      context: .
+      dockerfile: Dockerfile

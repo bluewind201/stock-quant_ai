@@ -1,0 +1,64 @@
+name: stock-quant
+services:
+  stock:
+    image: ${STOCK_IMAGE:-bluewind201/stock-quant:latest}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    ports:
+      - "${STOCK_BIND:-127.0.0.1:8430}:8080"
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the .env file next to this compose file}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      STOCK_BROKER: ${STOCK_BROKER:-toss}
+      TOSS_CLIENT_ID: ${TOSS_CLIENT_ID:-}
+      TOSS_CLIENT_SECRET: ${TOSS_CLIENT_SECRET:-}
+      KIS_ENV: ${KIS_ENV:-demo}
+      KIS_APP_KEY: ${KIS_APP_KEY:-}
+      KIS_APP_SECRET: ${KIS_APP_SECRET:-}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      SQT_AI_MODEL: ${SQT_AI_MODEL:-}
+      SQT_AI_PROVIDER: ${SQT_AI_PROVIDER:-claude}
+      SQT_CODEX_HOME: /home/stock/.stock-codex
+      CODEX_HOME: /home/stock/.stock-codex
+      SQT_AI_EFFORT: ${SQT_AI_EFFORT:-}
+      SQT_AI_DAILY_BUDGET: ${SQT_AI_DAILY_BUDGET:-64}
+      ENABLE_LIVE_TRADING: ${ENABLE_LIVE_TRADING:-false}
+      TOSS_ACCOUNT_SEQ: ${TOSS_ACCOUNT_SEQ:-}
+      LIVE_CAPITAL_KRW: ${LIVE_CAPITAL_KRW:-1000000}
+      LIVE_CAPITAL_USD: ${LIVE_CAPITAL_USD:-1000}
+      LIVE_MAX_ORDER_KRW: ${LIVE_MAX_ORDER_KRW:-1000000}
+      LIVE_MAX_ORDER_USD: ${LIVE_MAX_ORDER_USD:-1000}
+      PAPER_RESUME_ON_RESTART: ${PAPER_RESUME_ON_RESTART:-false}
+      NEWS_AUTO_REFRESH: ${NEWS_AUTO_REFRESH:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_LEVEL: ${TELEGRAM_LEVEL:-trades}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SQT_DB_PATH: /data/stock.sqlite3
+      TZ: Asia/Seoul
+    volumes:
+      - stock-data:/data
+      - claude-home:/home/stock/.claude
+      - codex-home:/home/stock/.stock-codex
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  codex-home:
+  claude-home:
+  stock-data:

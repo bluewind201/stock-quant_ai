@@ -1,0 +1,21 @@
+# 이 저장소는 Windows 에서 편집하고 Linux 컨테이너에서 실행한다.
+# CRLF 가 섞이면 셸 스크립트의 shebang 이 `/bin/sh^M` 으로 읽혀 죽고,
+# .env 값 끝에 \r 이 붙어 인증이 조용히 실패한다. 전부 LF 로 고정한다.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+Dockerfile  text eol=lf
+env.template text eol=lf
+
+# PowerShell 은 Windows 에서만 실행하므로 CRLF 유지
+*.ps1       text eol=crlf
+
+# 바이너리
+*.png binary
+*.jpg binary
+*.zip binary
