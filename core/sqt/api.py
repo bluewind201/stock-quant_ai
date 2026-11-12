@@ -780,6 +780,38 @@ def create_app(path=None, background=True):
             ai_status_cache['at']=now
         return ai_status_cache['value']
 
+    market_bar_cache={'at':0.0,'value':{'indices':[],'usd_krw':None,'overnight':[]}}
+    market_bar_lock=threading.Lock()
+
+    def cached_global_market(now):
+        from . import overnight as _ov, portfolio as _pf
+        if (time.time()-market_bar_cache['at']>180) and market_bar_lock.acquire(blocking=False):
+            def refresh_mkt():
+                try:
+                    ctx = toss.market_context() if toss.configured else {'indices_and_rates':[],'fx':None}
+                    ov = _ov.brief(toss) if toss.configured else {'rows':[]}
+                    market_bar_cache['value'] = {
+                        'indices': ctx.get('indices_and_rates', []),
+                        'usd_krw': (ctx.get('fx') or {}).get('usd_krw'),
+                        'overnight': (ov or {}).get('rows', []),
+                    }
+                    market_bar_cache['at'] = time.time()
+                except Exception:  # noqa: BLE001
+                    market_bar_cache['at'] = time.time()
+                finally:
+                    market_bar_lock.release()
+            threading.Thread(target=refresh_mkt, daemon=True).start()
+        return {
+            'kr': status('KRX', now),
+            'us': status('NASDAQ', now),
+            'kr_tradable': _pf.kr_tradable_window(now),
+            'us_tradable': _pf.us_session_open(now),
+            'us_preopen': _pf.us_preopen_or_open(now),
+            'usd_krw': market_bar_cache['value'].get('usd_krw') or 1385.0,
+            'indices': market_bar_cache['value'].get('indices', []),
+            'us_etfs': market_bar_cache['value'].get('overnight', []),
+        }
+
     @app.get('/api/dashboard')
     def dashboard(mode:str='',fast:bool=False):
         """첫 화면. 연결 상태 + 단타 계좌 요약 + 오늘 시장 여부. 한 번의 호출로 그린다.
@@ -797,7 +829,11 @@ def create_app(path=None, background=True):
             session=calendar('KRX').is_session(day)
         except Exception:  # noqa: BLE001
             session=True
+        gm = cached_global_market(now)
+        if view and view.get('fx_usd_krw') and not market_bar_cache['value'].get('usd_krw'):
+            gm = dict(gm, usd_krw=view['fx_usd_krw'])
         return {'now':now.isoformat(),'day':day,'market_session':session,
+                'global_market':gm,
                 'connections':{'toss':toss.configured,'claude':dashboard_ai_status(fast),'telegram':notify.configured()},
                 'accounts':[{'id':r['id'],'mode':r.get('mode','paper'),'status':r['status'],'phase':r['phase'],'day':r['day'],
                              'positions':len(r['positions']),'created_at':r['created_at']} for r in rows],

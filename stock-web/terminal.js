@@ -7,7 +7,7 @@ terminalMenu.classList.add('terminal-sidebar');
 terminalMenu.insertAdjacentHTML('afterbegin','<div class="sidebar-label">메뉴</div>');
 const terminalNavLabels={home:['01','홈'],office:['02','AI 회의실'],news:['03','뉴스'],dashboard:['04','상세 분석'],daytrade:['05','투자 운용'],settings:['06','연결 · 설정']};
 terminalMenu.querySelectorAll('[data-tab]').forEach(b=>{const v=terminalNavLabels[b.dataset.tab];if(v)b.innerHTML=`<span>${v[0]}</span>${v[1]}`;});
-terminalMenu.insertAdjacentHTML('beforeend','<div class="sidebar-bottom"><i></i> AI 투자 관리<br><small>단기 · 중기 · 장기<br>AI 판단과 실제 체결은 따로 표시합니다.</small><button data-goto="settings" class="quiet small">연결 관리 ↗</button></div>');
+terminalMenu.insertAdjacentHTML('beforeend','<div class="sidebar-bottom"><i></i> 글로벌 AI 투자 관리<br><small>🇰🇷 국내 · 🇺🇸 미국 24h<br>단기 · 중기 · 장기 멀티팩터</small><button data-goto="settings" class="quiet small">연결 관리 ↗</button></div>');
 document.querySelector('main').insertAdjacentHTML('afterbegin',`<section class="terminal-connections" aria-label="AI 연결 상태"><div class="connection-heading"><span class="eyebrow">AI 연결</span><b>투자 판단 연결</b></div><div id="terminal-auth" aria-live="polite"><span class="auth-chip pending">로그인 후 확인합니다</span></div><button id="terminal-auth-refresh" class="small">연결 다시 확인</button><small id="terminal-auth-time">모델 호출 없이 인증 상태 확인</small></section>`);
 
 function renderTerminalAuth(){

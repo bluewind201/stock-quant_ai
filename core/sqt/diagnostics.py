@@ -87,7 +87,9 @@ def checks(account: dict | None, *, ai_status: dict, toss_configured: bool, sess
         elif cfg.get('ai_office') is False:
             add('strategy', '운용 방식', 'warn', 'AI 회의실이 꺼져 있어 단일 판단만 합니다. 계좌 설정에서 켤 수 있습니다.', 'daytrade')
         else:
-            add('strategy', '운용 방식', 'ok', '단기·중기·장기 투자 · AI 회의실 사용')
+            markets = cfg.get('markets') or ['KR']
+            m_label = '국내+미국' if {'KR', 'US'} <= set(markets) else ('미국 전용' if markets == ['US'] else '국내 전용')
+            add('strategy', '운용 방식', 'ok', f'단기·중기·장기 투자 ({m_label}) · AI 회의실 사용')
         poll = _t(account.get('last_poll_at'))
         if running and session and account.get('phase') != 'holiday':
             stale = not poll or (now - poll).total_seconds() > 180

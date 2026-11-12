@@ -250,17 +250,19 @@ class Toss:
         return quotes
 
     # ── 단타 스캔용 조회 ──────────────────────────────────────────────────
-    def rankings(self, kind='TOP_GAINERS', duration=None, count=100, exclude_caution=True):
+    def rankings(self, kind='TOP_GAINERS', duration=None, count=100, exclude_caution=True, market_country='KR'):
         """주식 랭킹. kind: TOP_GAINERS | TOP_LOSERS | MARKET_TRADING_AMOUNT | MARKET_TRADING_VOLUME.
 
         장전 후보 풀을 만드는 데 쓴다. 투자유의 종목은 기본으로 뺀다.
         상승률·하락률 랭킹은 `realtime` 을 지원하지 않는다(400 unsupported-ranking-duration).
         거래대금·거래량은 `realtime` 이 된다. duration 을 비우면 종류에 맞게 고른다.
+        market_country: 'KR' (국내) | 'US' (미국).
         """
         if duration is None:
             duration = '1d' if kind in ('TOP_GAINERS', 'TOP_LOSERS') else 'realtime'
+        country = 'US' if str(market_country).upper() == 'US' else 'KR'
         result = self.get('/api/v1/rankings', {
-            'type': kind, 'marketCountry': 'KR', 'duration': duration,
+            'type': kind, 'marketCountry': country, 'duration': duration,
             'excludeInvestmentCaution': 'true' if exclude_caution else 'false',
             'count': max(1, min(int(count), 100))})
         rows = result.get('rankings') if isinstance(result, dict) else result
@@ -271,6 +273,10 @@ class Toss:
             price = row.get('price') or {}
             out.append({
                 'rank': int(row.get('rank') or 0), 'symbol': str(row['symbol']),
+                'name': str(row.get('name') or ''),
+                'market_country': country,
+                'market': str(row.get('market') or ''),
+                'currency': 'USD' if country == 'US' else 'KRW',
                 'last_price': float(price.get('lastPrice') or 0),
                 'base_price': float(price.get('basePrice') or 0),
                 'change_pct': float(price.get('changeRate') or 0) * 100.0,
@@ -313,7 +319,11 @@ class Toss:
         return result if isinstance(result, (list, dict)) else []
 
     def names(self, symbols):
-        """여러 국내 종목의 이름을 한 번에. 랭킹에서만 온 종목은 이름이 없어서 필요하다."""
+        """여러 국내·해외 종목의 이름을 한 번에. 랭킹에서만 온 종목은 이름이 없어서 필요하다."""
+        return {k: v['name'] for k, v in self.stock_meta(symbols).items() if v.get('name')}
+
+    def stock_meta(self, symbols):
+        """여러 종목의 이름·거래소·통화·상태를 한 번에 조회한다."""
         out = {}
         symbols = [s for s in dict.fromkeys(symbols) if s]
         for i in range(0, len(symbols), 50):
@@ -324,7 +334,17 @@ class Toss:
                 continue
             for row in rows if isinstance(rows, list) else []:
                 if isinstance(row, dict) and row.get('symbol'):
-                    out[str(row['symbol'])] = str(row.get('name') or '')
+                    sym = str(row['symbol'])
+                    mkt = str(row.get('market') or '')
+                    ex = 'KRX' if mkt in ('KOSPI', 'KOSDAQ', 'KR_ETC') else (mkt if mkt in ('NASDAQ', 'NYSE', 'AMEX') else '')
+                    out[sym] = {
+                        'symbol': sym,
+                        'name': str(row.get('name') or ''),
+                        'market': mkt,
+                        'exchange': ex,
+                        'currency': str(row.get('currency') or ('KRW' if ex == 'KRX' else 'USD')),
+                        'status': str(row.get('status') or ''),
+                    }
         return out
 
     def market_context(self):

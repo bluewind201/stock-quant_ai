@@ -1,23 +1,102 @@
-/* 홈 · 뉴스 센터 · 차트 툴팁 · 연결 설정 보강 */
-.home-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:26px 28px;margin-bottom:18px;border-radius:18px;border:1px solid #2f4a5f;
-  background:radial-gradient(ellipse at 100% 0,#1d4a4a 0,transparent 55%),radial-gradient(ellipse at 0 100%,#1f2f57 0,transparent 55%),linear-gradient(120deg,#142236,#101a2b);position:relative;overflow:hidden}
-.home-hero:after{content:'';position:absolute;inset:-40% -10% auto auto;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,#56e2c122,transparent 65%);animation:home-glow 9s ease-in-out infinite alternate;pointer-events:none}
+/* 글로벌 퀀트 홈 · 마켓 펄스 · 단중장기 스튜디오 · 뉴스 센터 · 연결 설정 */
+.global-pulse{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px 18px;padding:11px 18px;margin-bottom:16px;border-radius:14px;background:linear-gradient(95deg,#0f1c2ef2,#13263af2);border:1px solid #2b425c;box-shadow:0 8px 24px #0003}
+.global-pulse:empty{display:none}
+.gp-sessions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.gp-badge{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:600;background:#162538;border:1px solid #2f455e;color:#c9daee}
+.gp-badge i{width:7px;height:7px;border-radius:50%;background:#7c90a8}
+.gp-badge.open{border-color:#2c6e59;background:#13382e;color:#a5f5d6}
+.gp-badge.open i{background:#56e2c1;box-shadow:0 0 9px #56e2c1}
+.gp-badge.pre{border-color:#6e5831;background:#342a18;color:#f7d494}
+.gp-badge.pre i{background:#f3c57c;box-shadow:0 0 8px #f3c57c}
+.gp-badge small{color:#8fa5bf;font-weight:500;margin-left:2px;font-variant-numeric:tabular-nums}
+.gp-fx{font-size:12px;padding:5px 11px;border-radius:999px;background:#17283d;border:1px solid #324a66;color:#b8cde5;font-variant-numeric:tabular-nums}
+.gp-fx b{color:#7ee8d0}
+.gp-tickers{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.gp-ticker{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;background:#111d2e;border:1px solid #24364d;font-size:11.5px;font-variant-numeric:tabular-nums}
+.gp-ticker b{color:#d7e5f6;font-weight:650}
+.gp-ticker em{font-style:normal;font-weight:700}
+
+.home-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:26px 28px;margin-bottom:18px;border-radius:18px;border:1px solid #2f4d63;
+  background:radial-gradient(ellipse at 100% 0,#184f4a 0,transparent 55%),radial-gradient(ellipse at 0 100%,#1d315c 0,transparent 55%),linear-gradient(125deg,#122238,#0d1727);position:relative;overflow:hidden;box-shadow:0 18px 44px #0004}
+.home-hero:after{content:'';position:absolute;inset:-40% -10% auto auto;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,#56e2c124,transparent 65%);animation:home-glow 9s ease-in-out infinite alternate;pointer-events:none}
 @keyframes home-glow{from{transform:translate(0,0)}to{transform:translate(-60px,40px)}}
-.home-hero h1{font-size:28px;margin:6px 0 8px;letter-spacing:-.6px}
-.home-sentence{font-size:16px;line-height:1.7;color:#d3dfef;max-width:760px;margin:0 0 14px}
+.home-hero-main{flex:1;min-width:0}
+.home-hero-actions{display:flex;flex-direction:column;align-items:flex-end;gap:10px;z-index:1}
+.home-quick-controls{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.home-hero h1{font-size:28px;margin:6px 0 8px;letter-spacing:-.6px;color:#f4f8ff}
+.home-sentence{font-size:15.5px;line-height:1.7;color:#d3dfef;max-width:820px;margin:0 0 14px}
 .home-sentence b{color:#fff}
 .home-chips{display:flex;flex-wrap:wrap;gap:8px}
 .hchip{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;font-size:12px;background:#17263a;border:1px solid #33465d;color:#c6d6ea}
 .hchip i{width:7px;height:7px;border-radius:50%;background:#8195ad}
 .hchip.ok i{background:#61e8b0;box-shadow:0 0 8px #61e8b0}.hchip.live i{background:#fb8190;box-shadow:0 0 8px #fb8190}
 .hchip.warn i{background:#f3c57c}.hchip.bad{border-color:#8a4555;color:#ffb8bf}.hchip.bad i{background:#fb8190}.hchip.muted{color:#93a5bb}
-.home-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
-.hkpi{position:relative;overflow:hidden;padding:18px 20px 16px;border-radius:16px;border:1px solid #33415894;background:linear-gradient(140deg,#192a40,#121c2d)}
-.hkpi span{font-size:12.5px;color:var(--muted)}
-.hkpi strong{display:block;font-size:26px;letter-spacing:-.6px;margin:6px 0 4px;color:#f2f6fb;font-variant-numeric:tabular-nums}
+
+/* 글로벌 수익 극대화 원클릭 전환 배너 */
+.upgrade-banner{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 24px;margin-bottom:18px;border-radius:16px;border:1px solid #327262;
+  background:linear-gradient(115deg,#12352f 0%,#14283c 60%,#19253d 100%);box-shadow:0 12px 32px #0004}
+.upgrade-copy{flex:1;min-width:0}
+.upgrade-copy h3{margin:4px 0 6px;font-size:17px;color:#ecfff9;letter-spacing:-.3px}
+.upgrade-copy p{margin:0;font-size:13px;line-height:1.65;color:#c3dbec}
+.upgrade-cta{display:flex;flex-direction:column;align-items:stretch;gap:8px;flex-shrink:0}
+
+/* 6-Card Executive KPI Strip */
+.home-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}
+@media(min-width:1540px){.home-kpis{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.hkpi{position:relative;overflow:hidden;padding:17px 18px 15px;border-radius:16px;border:1px solid #334760a8;background:linear-gradient(145deg,#182940,#101b2b);transition:border-color .18s,transform .18s}
+.hkpi:hover{border-color:#4b6b8c;transform:translateY(-1px)}
+.hkpi span{font-size:12px;color:var(--muted);font-weight:600}
+.hkpi strong{display:block;font-size:23px;letter-spacing:-.6px;margin:6px 0 4px;color:#f2f6fb;font-variant-numeric:tabular-nums}
 .hkpi strong.up{color:var(--up)}.hkpi strong.down{color:var(--down)}
-.hkpi small{font-size:11.5px;color:#93a7bf}
-.hspark{position:absolute;right:0;bottom:0;width:48%;height:58px;opacity:.9;pointer-events:none}
+.hkpi small{display:block;font-size:11.5px;color:#93a7bf;line-height:1.45}
+.hspark{position:absolute;right:0;bottom:0;width:48%;height:54px;opacity:.88;pointer-events:none}
+
+/* 단기 · 중기 · 장기 전략 스튜디오 */
+.home-horizons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:12px}
+.hstudio-card{padding:18px;border-radius:14px;background:linear-gradient(145deg,#152438,#0f1a29);border:1px solid #2b3f57;display:flex;flex-direction:column;gap:6px}
+.hstudio-card.h-short{border-top:3px solid #38bdf8}
+.hstudio-card.h-medium{border-top:3px solid #fb923c}
+.hstudio-card.h-long{border-top:3px solid #34d399}
+.hstudio-card h3{margin:2px 0;font-size:17px;color:#eef5fc}
+.hstudio-nums{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.hstudio-nums strong{font-size:21px;color:#f5f9ff;font-variant-numeric:tabular-nums}
+.hstudio-nums span{font-size:12px;color:#93a9c4}
+.hstudio-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:8px 10px;border-radius:10px;background:#0d1624;border:1px solid #213247;font-size:11.5px;color:#9ab0ca}
+.hstudio-meta b{display:block;color:#e6f0fb;font-size:13px;margin-top:2px;font-variant-numeric:tabular-nums}
+.hstudio-list{margin:4px 0 2px;display:flex;flex-wrap:wrap;gap:6px;min-height:26px;align-items:center;font-size:12px}
+.mini-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;background:#192d44;border:1px solid #324b68;color:#dceafa;font-size:11.5px;font-weight:600}
+.mini-pill.plan{background:#15362f;border-color:#2d6858;color:#a5f2d6}
+
+/* 실시간 보유 포지션 & 손실방어 트래커 */
+.home-pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:10px}
+.home-pos-empty{grid-column:1/-1;padding:12px 4px}
+.hpos-card{padding:15px 16px;border-radius:13px;background:#121e30;border:1px solid #293d56;display:flex;flex-direction:column;gap:7px}
+.hpos-sub{display:flex;justify-content:space-between;font-size:12.5px;color:#b8cbe0;font-variant-numeric:tabular-nums}
+.hpos-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.hpos-foot small{color:#8fa5bf;font-size:11.5px;font-variant-numeric:tabular-nums}
+.hpos-tags{display:flex;gap:4px}
+.stop-track{position:relative;height:8px;border-radius:999px;background:#1e2f45;margin:6px 0;overflow:visible}
+.stop-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,#3b82f6,#56e2c1)}
+.stop-fill.gain{background:linear-gradient(90deg,#38bdf8,#fb8190)}
+.stop-fill.loss{background:linear-gradient(90deg,#2563eb,#76adff)}
+.stop-entry{position:absolute;top:-4px;width:2px;height:16px;background:#cbd5e1;border-radius:1px}
+.stop-dot{position:absolute;top:-3px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--accent);transform:translateX(-7px);box-shadow:0 2px 8px #0008}
+
+/* 투자 운용 포트폴리오 폼 & 리치 카드 보강 */
+.market-toggle-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:8px 0 14px}
+.market-pill{margin:0!important;padding:8px 14px;border-radius:10px;background:#112234;border:1px solid #32506d;font-weight:600;cursor:pointer}
+.profit-guard-box{padding:12px 15px;border-radius:12px;background:#0f2030;border:1px solid #2b4b63;margin:10px 0}
+.profit-guard-box label.check{margin:8px 0}
+.pf-filter-bar{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.pf-filter-bar button.active{background:#1b433a;border-color:#56e2c1;color:#bff8e6}
+.picked-card{border-color:#357a66!important;background:linear-gradient(135deg,#132f2c,#16273a)!important}
+.pf-metric-line{color:#9fd8cb!important;font-variant-numeric:tabular-nums}
+.rich-holding .holding-badges{display:flex;flex-wrap:wrap;gap:5px}
+.rich-holding .holding-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0 6px;padding:10px 12px;border-radius:10px;background:#0e1928;border:1px solid #23364d}
+.rich-holding .holding-metrics span{display:block;font-size:11px;color:#8fa5bf}
+.rich-holding .holding-metrics b{display:block;font-size:14.5px;margin:2px 0;font-variant-numeric:tabular-nums}
+.rich-holding .holding-metrics small{font-size:11.5px;color:#9cb2cc;font-variant-numeric:tabular-nums}
+
 .home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
 .home-grid.wide{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
 .home-grid>.panel{min-width:0}
@@ -45,7 +124,7 @@ canvas.chart[data-height="240"]{height:240px}canvas.chart[data-height="140"]{hei
 .home-foot{margin-top:6px}
 .home-empty{text-align:center;padding:40px 24px}.home-empty .controls{justify-content:center}
 .subnav.mini{margin:0;padding:3px}.subnav.mini button{padding:4px 10px;font-size:11.5px}
-/* 분류 태그 색 (텍스트는 기본 색, 점으로 구분) */
+/* 분류 태그 색 */
 .tag[class*="cat-"]{position:relative;padding-left:16px}
 .tag[class*="cat-"]:before{content:'';position:absolute;left:6px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#8195ad}
 .tag.cat-holding:before{background:#fb8190}.tag.cat-candidate:before{background:#f3c57c}.tag.cat-market:before{background:#56e2c1}
@@ -80,10 +159,10 @@ a.nc-title:hover{color:#7bdfd1}
 .tg-level{display:flex;flex-direction:column;gap:8px;margin:10px 0}
 .tg-level label{display:flex;gap:8px;align-items:flex-start;color:#c9d7ea;font-size:12.5px;line-height:1.5}
 .tg-level input{width:auto;margin-top:3px}
-@media(max-width:1150px){.home-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.home-grid,.home-grid.wide{grid-template-columns:1fr}}
-@media(max-width:760px){.home-hero{flex-direction:column;padding:20px}.home-hero h1{font-size:23px}.home-sentence{font-size:14.5px}
-  .home-kpis{grid-template-columns:1fr 1fr;gap:10px}.hkpi strong{font-size:20px}.home-stats{grid-template-columns:1fr 1fr}
-  .home-donut{grid-template-columns:1fr}.ai-login-grid{grid-template-columns:1fr}.nc-src{margin-left:0}}
+@media(max-width:1150px){.home-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.home-horizons{grid-template-columns:1fr}.home-grid,.home-grid.wide{grid-template-columns:1fr}.upgrade-banner{flex-direction:column;align-items:flex-start}.upgrade-cta{flex-direction:row;width:100%}}
+@media(max-width:760px){.home-hero{flex-direction:column;padding:20px}.home-hero-actions{align-items:stretch;width:100%}.home-quick-controls{justify-content:flex-start}.home-hero h1{font-size:23px}.home-sentence{font-size:14.5px}
+  .home-kpis{grid-template-columns:1fr 1fr;gap:10px}.hkpi strong{font-size:19px}.home-stats{grid-template-columns:1fr 1fr}
+  .home-donut{grid-template-columns:1fr}.ai-login-grid{grid-template-columns:1fr}.nc-src{margin-left:0}.rich-holding .holding-metrics{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.home-hero:after{animation:none}}
 body[data-tab="home"] .terminal-connections,body[data-tab="office"] .terminal-connections{display:none}
 .sidebar-label{letter-spacing:.5px}

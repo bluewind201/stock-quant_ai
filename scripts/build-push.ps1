@@ -57,10 +57,15 @@ if ($NoPush) { Write-Host '푸시   : 안 함 (로컬 빌드만)' -ForegroundCol
 if (-not $SkipTests) {
     Step '테스트'
     $python = Join-Path $root '.venv-stock\Scripts\python.exe'
-    if (-not (Test-Path -LiteralPath $python)) { throw '.venv-stock 이 없습니다. Start-Stock.cmd 를 한 번 실행하세요.' }
-    $env:PYTHONPATH = Join-Path $root 'core'
-    $env:PYTHONUTF8 = '1'
-    Invoke-Native '테스트' $python @('-m', 'pytest', 'core/tests', '-q')
+    if (Test-Path -LiteralPath $python) {
+        $env:PYTHONPATH = Join-Path $root 'core'
+        $env:PYTHONUTF8 = '1'
+        Invoke-Native '테스트' $python @('-m', 'pytest', 'core/tests', '-q')
+    } else {
+        Write-Host '.venv-stock 없음 — Docker(python:3.14-slim) 컨테이너에서 테스트를 실행합니다.' -ForegroundColor Yellow
+        $mount = ($root -replace '\\', '/') + ':/work'
+        Invoke-Native '컨테이너 테스트' docker @('run', '--rm', '-v', $mount, '-w', '/work', '-e', 'PYTHONPATH=/work/core', 'python:3.14-slim', 'sh', '-c', 'pip install -q --no-cache-dir --root-user-action=ignore -r core/requirements-stock.lock pytest httpx && pytest -o cache_dir=/tmp/pytest_cache core/tests -q')
+    }
 }
 
 # 기본 docker 드라이버는 멀티플랫폼 빌드를 못 한다.

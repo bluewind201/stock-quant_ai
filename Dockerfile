@@ -1,4 +1,4 @@
-﻿# Build target-architecture packages without privileged QEMU/binfmt installation.
+# Build target-architecture packages without privileged QEMU/binfmt installation.
 #
 # Claude Code ships a self-contained native binary per platform, so the final image
 # needs no Node runtime. Pulling only that binary instead of the previous Codex +
@@ -39,8 +39,8 @@ RUN case "$TARGETARCH" in amd64) wheel_arch=x86_64 ;; arm64) wheel_arch=aarch64 
 
 FROM python:3.14-slim
 LABEL org.opencontainers.image.title="Stock Quant AI Portfolio" \
-      org.opencontainers.image.version="3.22.2" \
-      org.opencontainers.image.description="Claude-subscription day-trade scheduler, Korean theme/news/flow scan, paper validation and explicitly enabled Toss live execution"
+      org.opencontainers.image.version="3.23.0" \
+      org.opencontainers.image.description="Global KR/US multi-horizon AI quant portfolio scheduler, profit-locking risk engine, and Toss execution"
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/core \
     TZ=Asia/Seoul SQT_DB_PATH=/data/stock.sqlite3 HOME=/home/stock \
     CLAUDE_CONFIG_DIR=/home/stock/.claude SQT_CODEX_HOME=/home/stock/.stock-codex CODEX_HOME=/home/stock/.stock-codex

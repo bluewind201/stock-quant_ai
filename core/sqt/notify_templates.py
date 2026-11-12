@@ -66,14 +66,22 @@ def _period(row):
 
 def buy_message(pos,mode='가상',state=None):
     mode='모의' if mode=='가상' else mode
-    label=' · '.join(x for x in (_period(pos),mode) if x)
+    is_usd = pos.get('currency') == 'USD'
+    mkt_tag = '🇺🇸미국' if is_usd else ''
+    label=' · '.join(x for x in (mkt_tag,_period(pos),mode) if x)
     qty=pos['qty'];price=pos['entry_price']
-    lines=[f'🟢 <b>매수</b> · {short(pos.get("name") or pos["symbol"],24)} ({label})',
-           f'{qty}주 × {price:,.0f}원 = {qty*price:,.0f}원 · {kst(pos.get("entry_at"))}']
-    if pos.get('strategy')=='portfolio':
-        lines.append(f'손절가 {pos["sl_price"]:,.0f}원 · 추세를 따라 보유')
+    if is_usd:
+        cost_line = f'{qty}주 × ${price:,.2f} (약 {pos.get("cost",0):,.0f}원) · {kst(pos.get("entry_at"))}'
+        stop_line = (f'손절가 ${pos["sl_price"]:,.2f} · 본절잠금·추세추종 보유'
+                     if pos.get('strategy')=='portfolio'
+                     else f'목표가 ${pos["tp_price"]:,.2f} / 손절가 ${pos["sl_price"]:,.2f}')
     else:
-        lines.append(f'목표가 {pos["tp_price"]:,.0f}원 / 손절가 {pos["sl_price"]:,.0f}원')
+        cost_line = f'{qty}주 × {price:,.0f}원 = {qty*price:,.0f}원 · {kst(pos.get("entry_at"))}'
+        stop_line = (f'손절가 {pos["sl_price"]:,.0f}원 · 추세를 따라 보유'
+                     if pos.get('strategy')=='portfolio'
+                     else f'목표가 {pos["tp_price"]:,.0f}원 / 손절가 {pos["sl_price"]:,.0f}')
+    lines=[f'🟢 <b>매수</b> · {short(pos.get("name") or pos["symbol"],24)} ({label})',
+           cost_line, stop_line]
     if pos.get('thesis'):lines.append('이유: '+short(pos.get('thesis'),60))
     return '\n'.join(lines)+web_link()
 
@@ -90,9 +98,12 @@ def sell_title(trade):
 def sell_message(trade,name,mode='가상',state=None):
     pnl=trade.get('pnl',0)
     mode='모의' if mode=='가상' else mode
-    label=' · '.join(x for x in (PERIODS[horizon(trade)] if horizon(trade)!='legacy' else '',mode) if x)
+    is_usd = trade.get('currency') == 'USD'
+    mkt_tag = '🇺🇸미국' if is_usd else ''
+    label=' · '.join(x for x in (mkt_tag,PERIODS[horizon(trade)] if horizon(trade)!='legacy' else '',mode) if x)
+    px_str = f'${trade["price"]:,.2f}' if is_usd else f'{trade["price"]:,.0f}원'
     lines=[f'{"🔴" if pnl<0 else "🔵"} <b>{sell_title(trade)}</b> · {short(name or trade["symbol"],24)} ({label})',
-           f'{trade["qty"]}주 × {trade["price"]:,.0f}원 · {kst(trade.get("at"))}',
+           f'{trade["qty"]}주 × {px_str} · {kst(trade.get("at"))}',
            f'실현손익 <b>{won(pnl)}</b> ({trade.get("pnl_pct",0):+.2f}%)',
            '사유: '+short(trade.get('reason'),65)]
     if state is not None:lines.append(f'누적 실현손익 {won(state.get("realized_pnl",0))}')

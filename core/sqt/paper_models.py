@@ -1,7 +1,10 @@
 """Contracts for forward paper trading. None of these models enable live orders."""
+import re
 from typing import Literal
 from pydantic import Field, model_validator
 from .models import Instrument, StrictModel
+
+_US_TICKER_RE = re.compile(r'^[A-Z][A-Z0-9.]{0,6}$')
 
 Bucket = Literal['scalp','swing','long']
 
@@ -116,10 +119,15 @@ class DayTradeConfig(StrictModel):
     """당일 단타 계좌 설정. 판단 시점·범위·비용을 전부 숫자로 둔다."""
     currency: Literal['KRW'] = 'KRW'
     strategy: Literal['ai','orb','retest','bull_flag','in_play','top5_morning','portfolio'] = 'ai'
-    portfolio_style: Literal['balanced','short','medium','long'] = 'balanced'
+    portfolio_style: Literal['balanced','growth','all_weather','short','medium','long'] = 'balanced'
+    markets: list[Literal['KR','US']] = Field(default_factory=lambda:['KR'],min_length=1,max_length=2)
     portfolio_core: list[str] = Field(default_factory=lambda:['069500','229200'],max_length=12)
-    portfolio_risk_pct: float = Field(default=.5,ge=.1,le=1)
+    us_core: list[str] = Field(default_factory=lambda:['NVDA','MSFT','AAPL','GOOGL','AMZN','META','AVGO','QQQ','SPY'],max_length=20)
+    portfolio_risk_pct: float = Field(default=.5,ge=.1,le=2.5)
     portfolio_watchlists: dict[Literal['short','medium','long'], list[str]] = Field(default_factory=dict)
+    us_watchlists: dict[Literal['short','medium','long'], list[str]] = Field(default_factory=dict)
+    breakeven_lock: bool = True
+    partial_tp: bool = True
     self_improve: bool = True
     ai_office: bool = True
     basket_entry_at: str = Field(default='09:05',pattern=r'^\d{2}:\d{2}$')
@@ -133,7 +141,7 @@ class DayTradeConfig(StrictModel):
     # paper: 가상 체결. live: 토스 실계좌에 실제 주문 (ENABLE_LIVE_TRADING + TOSS_ACCOUNT_SEQ 필요)
     mode: Literal['paper','live'] = 'paper'
     initial_cash: float = Field(default=10000000,gt=0,le=1e12)
-    max_positions: int = Field(default=5,ge=1,le=12)
+    max_positions: int = Field(default=5,ge=1,le=16)
     position_pct: float = Field(default=15,ge=1,le=30)
     take_profit_min_pct: float = Field(default=1,ge=1,le=30)
     take_profit_max_pct: float = Field(default=15,ge=1,le=50)
@@ -185,11 +193,18 @@ class DayTradeConfig(StrictModel):
 
     @model_validator(mode='after')
     def sane(self):
+        if len(set(self.markets))!=len(self.markets):
+            raise ValueError('운용 시장(KR/US)에 중복이 있습니다.')
         if len(set(self.portfolio_core))!=len(self.portfolio_core) or any(len(s)!=6 or not s.isdigit() for s in self.portfolio_core):
             raise ValueError('기본 관심종목은 중복 없는 국내 6자리 코드로 입력하세요.')
         for symbols in self.portfolio_watchlists.values():
             if len(symbols)>12 or len(set(symbols))!=len(symbols) or any(len(s)!=6 or not s.isdigit() for s in symbols):
                 raise ValueError('기간별 관심종목은 중복 없는 국내 6자리 코드 최대 12개입니다.')
+        if len(set(self.us_core))!=len(self.us_core) or any(not _US_TICKER_RE.match(s) for s in self.us_core):
+            raise ValueError('해외 기본 관심종목은 중복 없는 영문 대문자 티커(예: NVDA, AAPL)로 입력하세요.')
+        for symbols in self.us_watchlists.values():
+            if len(symbols)>12 or len(set(symbols))!=len(symbols) or any(not _US_TICKER_RE.match(s) for s in symbols):
+                raise ValueError('해외 기간별 관심종목은 중복 없는 영문 대문자 티커 최대 12개입니다.')
         if self.strategy=='portfolio':
             self.entry_at='09:05'
             self.entry_window_minutes=365
@@ -263,8 +278,8 @@ class HorizonReviews(StrictModel):
 
 class PortfolioPlan(StrictModel):
     summary: str = Field(min_length=1,max_length=1000)
-    picks: list[DayPick] = Field(default_factory=list,max_length=12)
-    exits: list[PortfolioExit] = Field(default_factory=list,max_length=12)
+    picks: list[DayPick] = Field(default_factory=list,max_length=16)
+    exits: list[PortfolioExit] = Field(default_factory=list,max_length=16)
     horizon_reviews: HorizonReviews = Field(default_factory=HorizonReviews)
 
     @model_validator(mode='after')

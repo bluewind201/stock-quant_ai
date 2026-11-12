@@ -162,9 +162,14 @@ class DayTradeService:
         state['config'].setdefault('strategy', 'ai')
         state['config'].setdefault('self_improve',True)
         state['config'].setdefault('portfolio_style','balanced')
+        state['config'].setdefault('markets',['KR'])
         state['config'].setdefault('portfolio_core',['069500','229200'])
+        state['config'].setdefault('us_core',['NVDA','MSFT','AAPL','GOOGL','AMZN','META','AVGO','QQQ','SPY'])
         state['config'].setdefault('portfolio_risk_pct',.5)
         state['config'].setdefault('portfolio_watchlists',{})
+        state['config'].setdefault('us_watchlists',{})
+        state['config'].setdefault('breakeven_lock',True)
+        state['config'].setdefault('partial_tp',True)
         learning.ensure(state)
         state['config'].setdefault('risk_per_trade_pct', .25)
         state['config'].setdefault('approval_minutes', 20)
@@ -207,6 +212,13 @@ class DayTradeService:
                 state['office']=office
             except KeyError:pass
         if state['config'].get('strategy')=='portfolio':state['portfolio_buckets']=portfolio.bucket_status(self,state)
+        now_v = utcnow()
+        state['fx_usd_krw'] = portfolio.fx_rate(self, state, now_v)
+        state['market_sessions'] = {
+            'kr_open': portfolio.kr_tradable_window(now_v),
+            'us_open': portfolio.us_session_open(now_v),
+            'us_preopen': portfolio.us_preopen_or_open(now_v),
+        }
         state.pop('account_seq', None)
         if self.is_live(state):
             state['orders'] = self.live.journal(id)
@@ -452,18 +464,29 @@ class DayTradeService:
         q = state['quotes'].get(pos['symbol'])
         if not q:
             return 0.0
+        if pos.get('currency', 'KRW') == 'USD':
+            fx = portfolio.fx_rate(self, state)
+            return pos['qty'] * q['bid'] * fx - pos['cost']
         return (q['bid'] - pos['entry_price']) * pos['qty']
 
     def equity(self, state: dict) -> float:
         value = state['cash']
+        fx = None
         for pos in state['positions'].values():
             q = state['quotes'].get(pos['symbol'])
-            value += (q['bid'] if q else pos['entry_price']) * pos['qty']
+            unit = q['bid'] if q else pos['entry_price']
+            if pos.get('currency', 'KRW') == 'USD':
+                if fx is None:
+                    fx = portfolio.fx_rate(self, state)
+                value += unit * pos['qty'] * fx
+            else:
+                value += unit * pos['qty']
         return value
 
     def _fill_buy(self, state: dict, symbol: str, name: str, krw: float, quote: dict,
                   tp_pct: float, sl_pct: float, meta: dict, now: datetime) -> bool:
         cfg=state['config']
+        is_us = portfolio.is_us_symbol(symbol)
         if cfg.get('strategy')=='top5_morning':
             if (meta.get('source')!='plan' or _minutes_since(now,cfg['entry_at'])>=cfg['entry_window_minutes']
                 or _hhmm(now)<cfg['entry_at']):
@@ -474,7 +497,11 @@ class DayTradeService:
         if symbol in occupied or len(occupied)>=cfg['max_positions']:
             self._log(state,f'{symbol} 매수 보류: 보유·미체결 포함 종목 한도')
             return False
-        if not _between(now,cfg['entry_at'],cfg['force_close_at']) or not self._tradable(state,now):
+        if cfg.get('strategy') == 'portfolio' and is_us:
+            if not portfolio.us_entry_window(now):
+                self._log(state, f'{symbol} 매수 차단: 미국 정규장 진입 가능 시간 밖')
+                return False
+        elif not _between(now,cfg['entry_at'],cfg['force_close_at']) or not self._tradable(state,now):
             self._log(state, f'{symbol} 매수 차단: 주문 가능 시간 밖')
             return False
         if not self._fresh_quote(quote, max(now, utcnow())):
@@ -512,22 +539,31 @@ class DayTradeService:
             meta['approval_expires_at']=deadline.isoformat()
         if strategy=='portfolio':
             h=meta.get('horizon','short')
-            if not '09:05'<=_hhmm(now)<'15:10':return False
+            if is_us:
+                if not portfolio.us_entry_window(now):
+                    return False
+            elif not '09:05'<=_hhmm(now)<'15:10':
+                return False
             if portfolio.bucket_status(self,state)[h]['open_slots']<=0:
                 self._log(state,f'{symbol} 매수 보류: {portfolio.LABELS[h]} 보유·미체결 종목 수 한도')
                 return False
-            if any(t['symbol']==symbol and _day(stamp(t['at']))==_day(now) for t in state['trades']):
+            local_tz = portfolio.ET if is_us else KST
+            today_local = now.astimezone(local_tz).date().isoformat()
+            if any(t['symbol']==symbol and stamp(t['at']).astimezone(local_tz).date().isoformat()==today_local for t in state['trades']):
                 self._log(state,f'{symbol} 매수 보류: 같은 날 재진입 제한')
                 return False
             krw=portfolio.budget(self,state,h,krw,quote,sl_pct,now)
             if krw<=0:
                 self._log(state,f'{symbol} 매수 보류: 투자 기간·전체 투자 한도 또는 현금 부족')
                 return False
-            meta.update(hold_overnight=True,approval_expires_at=now.astimezone(KST).replace(hour=15,minute=10,second=0,microsecond=0).isoformat())
+            exp_dt = (now.astimezone(portfolio.ET).replace(hour=15,minute=50,second=0,microsecond=0)
+                      if is_us else now.astimezone(KST).replace(hour=15,minute=10,second=0,microsecond=0))
+            meta.update(hold_overnight=True,approval_expires_at=exp_dt.isoformat())
         # Enforce price constraints against the executable price, not narrative text.
         ceiling = meta.get('max_entry_price') or 0
         cfg = state['config']
-        costs_pct = (2*cfg['fee_bps'] + cfg['sell_tax_bps'] + 2*cfg['slippage_bps']
+        sell_tax_bps = 0.0 if is_us else cfg['sell_tax_bps']
+        costs_pct = (2*cfg['fee_bps'] + sell_tax_bps + 2*cfg['slippage_bps']
                      + max(0, quote.get('spread_bps', 0))) / 100
         effective_sl=min(sl_pct,max(0,(1-meta['strategy_stop']/quote['ask'])*100)) if meta.get('strategy_stop') else sl_pct
         if strategy!='top5_morning' and tp_pct - costs_pct < effective_sl + costs_pct:
@@ -550,39 +586,87 @@ class DayTradeService:
             ceiling = min(ceiling or float('inf'), resistance / (1 + tp_pct/100))
         meta = dict(meta, max_entry_price=ceiling)
         if ceiling and quote['ask'] * (1 + state['config']['slippage_bps']/10000) > ceiling:
-            self._log(state, f'{symbol} 매수 보류: 예상 체결가가 계획·저항 기준 상한 {ceiling:,.0f}원 초과')
+            unit_lbl = f'${ceiling:,.2f}' if is_us else f'{ceiling:,.0f}원'
+            self._log(state, f'{symbol} 매수 보류: 예상 체결가가 계획·저항 기준 상한 {unit_lbl} 초과')
             return False
         if self.is_live(state):
+            if is_us:
+                self._log(state, f'{symbol} 매수 보류: 해외주식 주문은 현재 모의운용 전용입니다')
+                return False
             return self.live.queue_buy(state, symbol, name, krw, quote, tp_pct, sl_pct, meta, now, self._log)
         cfg = state['config']
+        fx = portfolio.fx_rate(self, state, now) if is_us else 1.0
         ask = quote['ask'] * (1 + cfg['slippage_bps'] / 10000)
-        unit = ask * (1 + cfg['fee_bps'] / 10000)
-        qty = int(krw // unit)
+        unit_krw = ask * fx * (1 + cfg['fee_bps'] / 10000)
+        qty = int(krw // unit_krw)
         if meta.get('max_qty') is not None:qty=min(qty,int(meta['max_qty']))
         if qty < 1:
             self._log(state, f'{symbol} 매수 불가: 예산 {krw:,.0f}원으로 1주도 못 삼')
             return False
-        cost = qty * unit
+        cost = qty * unit_krw
         if cost > state['cash']:
             self._log(state, f'{symbol} 매수 불가: 현금 부족')
             return False
         state['cash'] -= cost
+        inst = portfolio.instrument_for(symbol, state.get('symbol_meta'))
+        pos_extra = {'currency': 'USD', 'market': 'US', 'exchange': inst.exchange, 'entry_fx': round(fx, 2)} if is_us else {'currency': 'KRW', 'market': 'KR', 'exchange': 'KRX'}
         state['positions'][symbol] = {
-            'symbol': symbol, 'name': name, 'qty': qty, 'entry_price': ask,
+            'symbol': symbol, 'name': name, 'qty': qty, 'initial_qty': qty, 'entry_price': ask,
             'entry_at': now.isoformat(), 'cost': cost,
             'tp_pct': tp_pct, 'sl_pct': sl_pct,
             'tp_price': ask * (1 + tp_pct / 100), 'sl_price': ask * (1 - sl_pct / 100),
-            'hold_overnight': False, **meta,
+            'hold_overnight': False, **pos_extra, **meta,
         }
         state['trades'].append({'symbol': symbol, 'side': 'buy', 'qty': qty, 'price': ask,
+                                'currency': 'USD' if is_us else 'KRW', 'market': 'US' if is_us else 'KR',
+                                'fx_rate': round(fx, 2) if is_us else 1.0,
                                 'name':name,
                                 'horizon':meta.get('horizon','short'),
                                 'basket_rank':meta.get('basket_rank'),
                                 'policy_version':meta['policy_version'],'decision_id':meta.get('decision_id'),
                                 'strategy':strategy,'plan_decided_at':meta['plan_decided_at'],
                                 'at': now.isoformat(), 'reason': meta.get('source', 'plan')})
-        self._log(state, f'{name}({symbol}) {qty}주 매수 @{ask:,.0f} · 익절 +{tp_pct}% 손절 -{sl_pct}%')
+        price_lbl = f'${ask:,.2f} (환율 {fx:,.0f}원)' if is_us else f'{ask:,.0f}'
+        self._log(state, f'{name}({symbol}) {qty}주 매수 @{price_lbl} · 익절 +{tp_pct}% 손절 -{sl_pct}%')
         notify.post(notify.buy_message(state['positions'][symbol],state=state),'trade')
+        return True
+
+    def _fill_partial_sell(self, state: dict, symbol: str, sell_qty: int, price: float, reason: str, now: datetime) -> bool:
+        if self.is_live(state):
+            return False
+        quote = state['quotes'].get(symbol)
+        if not self._fresh_quote(quote, max(now, utcnow())):
+            return False
+        pos = state['positions'].get(symbol)
+        if not pos or sell_qty < 1 or sell_qty >= pos['qty']:
+            return False
+        cfg = state['config']
+        is_us = pos.get('currency', 'KRW') == 'USD'
+        fx = portfolio.fx_rate(self, state, now) if is_us else 1.0
+        sell_tax = 0.0 if is_us else cfg['sell_tax_bps']
+        net_price = quote['bid'] * (1 - cfg['slippage_bps'] / 10000)
+        proceeds = sell_qty * net_price * fx * (1 - (cfg['fee_bps'] + sell_tax) / 10000)
+        cost_sold = pos['cost'] * (sell_qty / pos['qty'])
+        pnl = proceeds - cost_sold
+        pos['qty'] -= sell_qty
+        pos['cost'] -= cost_sold
+        state['cash'] += proceeds
+        state['realized_pnl'] += pnl
+        state['trades'].append({
+            'symbol': symbol, 'side': 'sell', 'partial': True, 'qty': sell_qty,
+            'currency': 'USD' if is_us else 'KRW', 'market': 'US' if is_us else 'KR',
+            'fx_rate': round(fx, 2) if is_us else 1.0,
+            'name': pos.get('name') or symbol, 'horizon': pos.get('horizon', 'short'),
+            'price': net_price, 'at': now.isoformat(), 'pnl': pnl,
+            'strategy': pos.get('strategy', 'ai'), 'basket_rank': pos.get('basket_rank'),
+            'policy_version': pos.get('policy_version'), 'decision_id': pos.get('decision_id'),
+            'entry_at': pos.get('entry_at'), 'cost_basis': cost_sold,
+            'pnl_pct': pnl / cost_sold * 100 if cost_sold else 0.0, 'reason': reason,
+        })
+        price_lbl = f'${net_price:,.2f}' if is_us else f'{net_price:,.0f}'
+        self._log(state, f'{pos["name"]}({symbol}) {sell_qty}주 분할익절 @{price_lbl} · {pnl:+,.0f}원 '
+                         f'({pnl / cost_sold * 100:+.2f}%) · 잔여 {pos["qty"]}주 추세유지')
+        notify.post(notify.sell_message(state['trades'][-1], pos['name'], state=state), 'trade')
         return True
 
     def _fill_sell(self, state: dict, symbol: str, price: float, reason: str, now: datetime) -> None:
@@ -598,12 +682,17 @@ class DayTradeService:
         if not pos:
             return
         cfg = state['config']
+        is_us = pos.get('currency', 'KRW') == 'USD'
+        fx = portfolio.fx_rate(self, state, now) if is_us else 1.0
+        sell_tax = 0.0 if is_us else cfg['sell_tax_bps']
         net_price = price * (1 - cfg['slippage_bps'] / 10000)
-        proceeds = pos['qty'] * net_price * (1 - (cfg['fee_bps'] + cfg['sell_tax_bps']) / 10000)
+        proceeds = pos['qty'] * net_price * fx * (1 - (cfg['fee_bps'] + sell_tax) / 10000)
         pnl = proceeds - pos['cost']
         state['cash'] += proceeds
         state['realized_pnl'] += pnl
         state['trades'].append({'symbol': symbol, 'side': 'sell', 'qty': pos['qty'],
+                                'currency': 'USD' if is_us else 'KRW', 'market': 'US' if is_us else 'KR',
+                                'fx_rate': round(fx, 2) if is_us else 1.0,
                                 'name':pos.get('name') or symbol,
                                 'horizon':pos.get('horizon','short'),
                                 'price': net_price, 'at': now.isoformat(), 'pnl': pnl,
@@ -612,7 +701,8 @@ class DayTradeService:
                                 'policy_version':pos.get('policy_version'),'decision_id':pos.get('decision_id'),
                                 'entry_at':pos.get('entry_at'),'cost_basis':pos['cost'],
                                 'pnl_pct': pnl / pos['cost'] * 100, 'reason': reason})
-        self._log(state, f'{pos["name"]}({symbol}) 청산 @{net_price:,.0f} · {pnl:+,.0f}원 '
+        price_lbl = f'${net_price:,.2f}' if is_us else f'{net_price:,.0f}'
+        self._log(state, f'{pos["name"]}({symbol}) 청산 @{price_lbl} · {pnl:+,.0f}원 '
                          f'({pnl / pos["cost"] * 100:+.2f}%) · {reason}')
         notify.post(notify.sell_message(state['trades'][-1], pos['name'],state=state),'trade')
 
@@ -813,8 +903,11 @@ class DayTradeService:
                 if self.is_live(state):
                     self.live.pulse(state, now, self._log)
 
-                # 새 거래일 - 어제 것 정리. 밤새 들고 온 포지션은 남긴다.
-                if state['day'] != day:
+                # 새 거래일 - 어제 것 정리. 미국 정규장이 자정 너머 진행 중일 때는 미국장 종료 후 넘긴다.
+                us_active_now = (cfg.get('strategy') == 'portfolio'
+                                 and 'US' in (cfg.get('markets') or ['KR'])
+                                 and portfolio.us_preopen_or_open(now))
+                if state['day'] != day and not us_active_now:
                     state['day'] = day
                     state['phase'] = 'idle'
                     state['scan'] = None
@@ -825,7 +918,7 @@ class DayTradeService:
                     learning.advance(state,now)
                     learning.ensure(state)['observations']={}
                     learning.ensure(state)['entry_checks']={}
-                    state['events'] = {'seen_news': [], 'surge_ref': {}, 'surged': []}
+                    state['events'] = {'seen_news': [], 'surge_ref': {}, 'surged': [], 'portfolio_reviews': []}
                     state['stamps'] = {}
                     state['retry'] = {'attempts': 0, 'last': None}
                     state['sessions'] = None
@@ -833,7 +926,11 @@ class DayTradeService:
                         pos['hold_overnight'] = cfg.get('strategy')=='portfolio'
                     self._log(state, f'{day} 거래일 시작')
 
-                if not calendar('KRX').is_session(day):
+                if not calendar('KRX').is_session(day) or day in {'2026-06-03', '2026-07-17'}:
+                    if cfg.get('strategy') == 'portfolio' and 'US' in (cfg.get('markets') or ['KR']) and portfolio.us_preopen_or_open(now):
+                        portfolio.tick(self, state, now)
+                        self.store.put(self.account_kind, id, state)
+                        return
                     state['phase'] = 'holiday'
                     self.store.put(self.account_kind, id, state)
                     return
@@ -933,15 +1030,18 @@ class DayTradeService:
     # ── 장전 스캔·판단: 될 때까지 다시 시도한다 ───────────────────────────────
     def _needs_plan(self, state: dict, now: datetime) -> bool:
         cfg = state['config']
+        us_open_mode = (cfg.get('strategy') == 'portfolio'
+                        and 'US' in (cfg.get('markets') or ['KR'])
+                        and portfolio.us_preopen_or_open(now))
         if cfg.get('strategy')=='top5_morning' and (state.get('basket',{}).get('locked') or
                 _minutes_since(now,cfg['entry_at'])>=cfg['entry_window_minutes']):
             state.pop('_force_scan',None)
             return False
-        # Includes legacy/manual requests restored after a midnight restart.
-        if _hhmm(now)>=cfg['force_close_at']:
+        # Includes legacy/manual requests restored after a midnight restart (unless US market session is active).
+        if _hhmm(now)>=cfg['force_close_at'] and not us_open_mode:
             state.pop('_force_scan',None)
             return False
-        if _hhmm(now) < max('07:30', cfg['scan_at']):
+        if _hhmm(now) < max('07:30', cfg['scan_at']) and not us_open_mode:
             if state.pop('_force_scan', None):
                 self._log(state, f'장전 판단은 한국시간 {cfg["scan_at"]} 예약 시각에 실행합니다')
             return False
@@ -956,7 +1056,7 @@ class DayTradeService:
             state.pop('_force_scan', None)
             self._log(state, '즉시 스캔 요청이 30분을 넘겨 취소되었습니다 (예약 시각에 다시 합니다)')
             return False
-        if not _after(now, cfg['scan_at']) or _hhmm(now) >= cfg['force_close_at']:
+        if (not _after(now, cfg['scan_at']) or _hhmm(now) >= cfg['force_close_at']):
             return False
         phase = state['phase']
         # idle/holiday: 아직 안 했다. scanned: 스캔은 됐는데 판단이 안 붙었다.
@@ -1082,10 +1182,12 @@ class DayTradeService:
             'note': scan['note'],
         }
         if cfg.get('strategy')=='portfolio':
-            snapshot['portfolio_policy']={'style':cfg['portfolio_style'],'caps':portfolio.CAPS[cfg['portfolio_style']],
+            caps = portfolio.style_caps(cfg)
+            snapshot['portfolio_policy']={'style':cfg['portfolio_style'],'caps':caps,
+                'markets':cfg.get('markets',['KR']),'usd_krw':portfolio.fx_rate(self,state,now),
                 'buckets':portfolio.bucket_status(self,state),
                 'exit_evidence':portfolio.exit_evidence(state),
-                'horizons':portfolio.LABELS,'cash_floor_pct':20,'risk_per_trade_pct':cfg['portfolio_risk_pct'],
+                'horizons':portfolio.LABELS,'cash_floor_pct':max(10,100-sum(caps.values())),'risk_per_trade_pct':cfg['portfolio_risk_pct'],
                 'held':list(state['positions'].values()),'held_daily':{s:{k:v for k,v in f.items() if k!='chart'} for s,f in state.get('portfolio_held_data',{}).items()},
                 'no_day_end_liquidation':True,'fundamentals':'미수집: 밸류·재무 건전성 판단 근거로 사용할 수 없음'}
         # "AI 가 무엇을 보고 판단했나" 를 화면에 보여주기 위해 남긴다. 후보별 기사는 scan 안에 있다.
@@ -1126,7 +1228,11 @@ class DayTradeService:
         technical=c.get('technical')
         if c.get('portfolio') and technical:technical=dict(technical,daily=daily)
         return {
-            'symbol': c['symbol'], 'name': c.get('name', ''), 'score': c.get('score'),
+            'symbol': c['symbol'], 'name': c.get('name', ''),
+            'market': c.get('market', 'US' if portfolio.is_us_symbol(c['symbol']) else 'KR'),
+            'currency': c.get('currency', 'USD' if portfolio.is_us_symbol(c['symbol']) else 'KRW'),
+            'exchange': c.get('exchange', 'NASDAQ' if portfolio.is_us_symbol(c['symbol']) else 'KRX'),
+            'score': c.get('score'),
             'origins': c.get('origins', []), 'prev_change_pct': c.get('prev_change_pct'),
             'last_price': c.get('last_price'), 'trading_amount_krw': c.get('trading_amount'),
             'flow_foreigner_1d': c.get('flow_foreigner_1d'), 'flow_institution_1d': c.get('flow_institution_1d'),
@@ -1136,13 +1242,16 @@ class DayTradeService:
             'portfolio': daily or None, 'eligible_horizons':c.get('eligible_horizons',[]),
             'data_notes':c.get('data_notes',[]),
             'in_play': c.get('in_play'),
-            'news': [{'title': n['title'], 'body': n['body'][:400], 'source': n['source'],
-                      'published_at': n['published_at']} for n in c.get('news', [])[:4]],
+            'news': [{'title': n['title'], 'body': n.get('body','')[:400], 'source': n.get('source',''),
+                      'published_at': n.get('published_at','')} for n in c.get('news', [])[:4]],
         }
 
     def _apply_plan(self, state: dict, plan: dict, now: datetime) -> None:
         cfg = state['config']
-        if state['day'] != _day(now) or _hhmm(now) < max('07:30', cfg['scan_at']):
+        us_open_mode = (cfg.get('strategy') == 'portfolio'
+                        and 'US' in (cfg.get('markets') or ['KR'])
+                        and portfolio.us_preopen_or_open(now))
+        if state['day'] != _day(now) or (_hhmm(now) < max('07:30', cfg['scan_at']) and not us_open_mode):
             state['phase'] = 'idle'
             self._log(state, '장전 판단 결과 폐기: 거래일 또는 한국시간 예약 구간이 달라졌습니다')
             return
@@ -1267,22 +1376,26 @@ class DayTradeService:
         if not symbols:
             return
         try:
-            quotes = self.broker.quotes([Instrument(symbol=s, exchange='KRX') for s in symbols])
+            meta = state.get('symbol_meta') or {}
+            instruments = [portfolio.instrument_for(s, meta) for s in symbols]
+            quotes = self.broker.quotes(instruments)
             state['quotes'].update(quotes)
             state['errors'].pop('quotes', None)
         except Exception as exc:  # noqa: BLE001
             state['errors']['quotes'] = f'시세 조회 실패: {exc}'
 
-    def _do_entry(self, state: dict, now: datetime) -> None:
+    def _do_entry(self, state: dict, now: datetime, market_filter: str | None = None) -> None:
         cfg = state['config']
         if cfg.get('strategy')=='in_play':
             state['phase']='monitoring'
             return
         plan = state.get('plan') or {}
         pending = [p for p in plan.get('picks', []) if p['symbol'] not in state['positions']
-                   and not p.get('_done')]
+                   and not p.get('_done')
+                   and (market_filter is None or portfolio.symbol_market(p['symbol']) == market_filter)]
         if not pending:
-            state['phase'] = 'monitoring'
+            if all(p.get('_done') or p['symbol'] in state['positions'] for p in plan.get('picks', [])):
+                state['phase'] = 'monitoring'
             return
         self._refresh_quotes(state, [p['symbol'] for p in pending])
         equity = self.equity(state)

@@ -19,6 +19,12 @@ def krx_sessions(start, end):
             if d.strftime('%Y-%m-%d') not in KRX_EXTRA_CLOSED]
 
 
+def exchange_sessions(exchange, start, end):
+    if exchange == 'KRX':
+        return krx_sessions(start, end)
+    return [d.strftime('%Y-%m-%d') for d in calendar(exchange).sessions_in_range(start, end)]
+
+
 def session(exchange, day):
     cal = calendar(exchange)
     if not cal.is_session(day):
