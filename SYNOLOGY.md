@@ -1,6 +1,24 @@
 # Synology에서 AI 주식 투자 운용
 
-## 최신 릴리스 3.22.2 · 2026-11-06
+## 최신 릴리스 3.23.0 · 2026-11-13
+
+국내(KRX) · 미국(NASDAQ/NYSE/AMEX) 24시간 글로벌 멀티팩터 퀀트 운용, 본절잠금(`+2.5%/+4.5%/+7.0%`),
+1차 50% 분할익절 + 트레일링 수익 극대화 엔진, 성장형/올웨더 자산배분, 글로벌 마켓 펄스 및
+단기·중기·장기 수익 스튜디오 대시보드 전면 개편(`?v=3.23.0` 정적 캐시 무효화 포함).
+기존 구독 AI 인증(Claude Code / Codex CLI, `/data/ai-auth`)과 거래 DB 볼륨을 100% 그대로 유지한다.
+
+Linux 컨테이너 전체 테스트 398개 통과(Windows 전용 4개 제외).
+Docker Hub `bluewind201/stock-quant:3.23.0` / `latest` 멀티아키텍처(`linux/amd64`, `linux/arm64`) 게시 및 시크릿 비포함 검사 완료.
+두 태그의 amd64/arm64 이미지 digest:
+`sha256:6128289bfce6433611807fbdf04fa52196070cdce41596ae36785270d233c875`.
+고정 태그를 쓰면 `.env`의 `STOCK_IMAGE=bluewind201/stock-quant:3.23.0`으로 변경한다.
+
+```sh
+docker compose pull stock
+docker compose up -d --force-recreate stock
+```
+
+## 이전 릴리스 3.22.2 · 2026-11-06
 
 [전 종목 탈락 수정](UX-OVERHAUL-2026-11-02.md) (3.22.2 절). 달력 라이브러리가 2026-06-03, 2026-07-17 휴장을 몰라
 portfolio 계좌의 모든 종목이 일봉 검사에서 탈락해 회의·매수가 멈췄던 문제를 고쳤다. 달력이 모르는 휴장일은 KODEX 200 일봉으로

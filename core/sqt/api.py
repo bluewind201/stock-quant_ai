@@ -274,7 +274,7 @@ def create_app(path=None, background=True):
 
     @app.get('/api/health')
     def health():
-        return {'ok':True,'mode':'historical_paper','live_orders':live.orders.enabled,
+        return {'ok':True,'version':'3.23.0','mode':'historical_paper','live_orders':live.orders.enabled,
                 'password_configured':bool(os.getenv('ADMIN_PASSWORD'))}
 
     @app.post('/api/login')

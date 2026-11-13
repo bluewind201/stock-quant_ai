@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     PC 에서 멀티아키텍처 이미지를 빌드해 Docker Hub 에 올린다. NAS 는 pull 만 한다.
 
@@ -88,6 +88,10 @@ if (-not $NoPush) {
         try {
             $json = Get-Content -LiteralPath $config -Raw -Encoding UTF8 | ConvertFrom-Json
             if ($json.auths -and ($json.auths.PSObject.Properties.Name -match 'docker\.io')) { $loggedIn = $true }
+            elseif ($json.credsStore) {
+                $credOut = & ("docker-credential-" + $json.credsStore) list 2>$null | Out-String
+                if ($credOut -match 'docker\.io') { $loggedIn = $true }
+            }
         } catch { $loggedIn = $false }
     }
     if ($loggedIn) { Write-Host '이미 로그인되어 있습니다.' }
