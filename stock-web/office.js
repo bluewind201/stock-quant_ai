@@ -137,33 +137,58 @@ class OfficeScene{
       if(night){for(let i=0;i<14;i++){const tw=.5+.5*Math.sin(this.t*2+i*1.7);c.fillStyle=`rgba(255,226,140,${.35+tw*.5})`;c.fillRect(wx+6+(i*29)%180,70+(i*13)%30,2,2);}}
       c.strokeStyle='#2b3b5c';c.lineWidth=4;c.strokeRect(wx,18,194,86);c.beginPath();c.moveTo(wx+97,18);c.lineTo(wx+97,104);c.stroke();}
     // 전광판
-    c.fillStyle='#0a101c';c.beginPath();c.roundRect?c.roundRect(300,14,400,96,10):c.rect(300,14,400,96);c.fill();
-    c.strokeStyle='#2c3e5e';c.lineWidth=3;c.stroke();
-    c.fillStyle='#56e2c1';c.font='700 15px "Segoe UI","Malgun Gothic",sans-serif';c.textAlign='center';c.textBaseline='middle';
-    c.fillText(v.replay?'지난 회의 다시 보기':'AI 투자팀 회의실',500,34);
-    c.font='12px "Segoe UI","Malgun Gothic",sans-serif';c.fillStyle='#c9d7ea';c.fillText(officeText(this.headline(v),44),500,56);
-    officeOrder.forEach((id,i)=>{const st=v.stages[id]?.status,x=355+i*41.5,y=84;c.fillStyle=st==='done'?'#56e2c1':st==='running'?'#f3c57c':st==='failed'?'#fb8190':'#27344d';
-      c.beginPath();c.arc(x,y,st==='running'?7+Math.sin(this.t*6)*1.2:7,0,Math.PI*2);c.fill();c.fillStyle='#0a101c';c.font='700 9px "Segoe UI","Malgun Gothic",sans-serif';c.fillText(officeRoles[i].short[0],x,y+.5);
-      if(i<7){c.fillStyle='#27344d';c.fillRect(x+8,y-1,25,2);}});
+    c.fillStyle='#09101d';c.beginPath();c.roundRect?c.roundRect(300,14,400,96,10):c.rect(300,14,400,96);c.fill();
+    c.strokeStyle=v.status==='running'?'#2dd4bf':'#2c3e5e';c.lineWidth=2.5;c.stroke();
+    // 전광판 하단 뉴럴 파형
+    c.save();c.beginPath();for(let i=0;i<=48;i++){const px=314+i*7.75,amp=v.status==='running'?5:1.8,spd=this.reduce()?0:this.t*3.2;const py=68+Math.sin(i*.42+spd)*amp*Math.sin(i/48*Math.PI);i?c.lineTo(px,py):c.moveTo(px,py);}c.strokeStyle=v.status==='running'?'rgba(45,212,191,.36)':'rgba(167,139,250,.18)';c.lineWidth=1.5;c.stroke();c.restore();
+    c.fillStyle='#2dd4bf';c.font='700 15px "Segoe UI","Malgun Gothic",sans-serif';c.textAlign='center';c.textBaseline='middle';
+    c.fillText(v.replay?'지난 회의 다시 보기':'AI 투자팀 회의실',500,32);
+    c.font='12px "Segoe UI","Malgun Gothic",sans-serif';c.fillStyle='#d5e2f2';c.fillText(officeText(this.headline(v),44),500,52);
+    officeOrder.forEach((id,i)=>{const st=v.stages[id]?.status,x=355+i*41.5,y=87;
+      if(st==='running'){c.fillStyle='rgba(251,191,36,.22)';c.beginPath();c.arc(x,y,11.5,0,Math.PI*2);c.fill();}
+      c.fillStyle=st==='done'?'#2dd4bf':st==='running'?'#fbbf24':st==='failed'?'#ff5c77':'#27344d';
+      c.beginPath();c.arc(x,y,st==='running'&&!this.reduce()?7+Math.sin(this.t*6)*1.2:7,0,Math.PI*2);c.fill();c.fillStyle='#09101d';c.font='700 9px "Segoe UI","Malgun Gothic",sans-serif';c.fillText(officeRoles[i].short[0],x,y+.5);
+      if(i<7){c.fillStyle=st==='done'?'rgba(45,212,191,.6)':'#27344d';c.fillRect(x+8,y-1,25,2);}});
     // 벽시계
     const now=new Date(),kst=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));const cx=740,cy=60;
     c.fillStyle='#e9eef6';c.beginPath();c.arc(cx-4,cy,15,0,Math.PI*2);c.fill();c.strokeStyle='#2b3b5c';c.lineWidth=2;c.stroke();
     const hand=(a,l,w)=>{c.strokeStyle='#1a2236';c.lineWidth=w;c.beginPath();c.moveTo(cx-4,cy);c.lineTo(cx-4+Math.sin(a)*l,cy-Math.cos(a)*l);c.stroke();};
     hand((kst.getHours()%12+kst.getMinutes()/60)/12*Math.PI*2,8,2.4);hand(kst.getMinutes()/60*Math.PI*2,12,1.6);
     // 바닥
-    g=c.createLinearGradient(0,128,0,H);g.addColorStop(0,'#1a2539');g.addColorStop(1,'#121a2a');c.fillStyle=g;c.fillRect(0,128,W,H-128);
-    c.strokeStyle='rgba(255,255,255,.035)';c.lineWidth=1;for(let x=0;x<W;x+=50){c.beginPath();c.moveTo(x,128);c.lineTo(x,H);c.stroke();}for(let y=128;y<H;y+=50){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}
+    g=c.createLinearGradient(0,128,0,H);g.addColorStop(0,'#172236');g.addColorStop(1,'#0e1524');c.fillStyle=g;c.fillRect(0,128,W,H-128);
+    c.strokeStyle='rgba(148,163,184,.04)';c.lineWidth=1;for(let x=0;x<W;x+=50){c.beginPath();c.moveTo(x,128);c.lineTo(x,H);c.stroke();}for(let y=128;y<H;y+=50){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}
     // 창문 빛
     if(!night){for(const wx of [36,770]){g=c.createLinearGradient(wx,128,wx+120,420);g.addColorStop(0,'rgba(255,240,200,.10)');g.addColorStop(1,'rgba(255,240,200,0)');c.fillStyle=g;
       c.beginPath();c.moveTo(wx+20,128);c.lineTo(wx+180,128);c.lineTo(wx+260,420);c.lineTo(wx+80,420);c.closePath();c.fill();}}
-    // 러그 + 자료 선반
-    c.fillStyle='rgba(86,226,193,.06)';c.beginPath();c.ellipse(TABLE.x,TABLE.y+6,TABLE.rx+70,TABLE.ry+50,0,0,Math.PI*2);c.fill();
-    c.strokeStyle='rgba(86,226,193,.18)';c.setLineDash([6,6]);c.stroke();c.setLineDash([]);
+    // 러그 + 뉴럴 데이터 배선 + 자료 선반
+    c.fillStyle='rgba(45,212,191,.06)';c.beginPath();c.ellipse(TABLE.x,TABLE.y+6,TABLE.rx+76,TABLE.ry+54,0,0,Math.PI*2);c.fill();
+    c.strokeStyle='rgba(45,212,191,.22)';c.setLineDash([6,6]);c.stroke();c.setLineDash([]);
+    this.drawNeuralLinks(v);
     c.fillStyle='#2a3550';c.fillRect(16,140,52,74);c.fillStyle='#3a4a6b';for(let i=0;i<3;i++)c.fillRect(20,146+i*23,44,18);
     c.fillStyle='#8aa2c6';for(let i=0;i<3;i++)for(let j=0;j<4;j++)c.fillRect(24+j*10,150+i*23,6,10);
     // 화분
     for(const [px,py] of [[960,168],[960,590],[40,590]]){c.fillStyle='#6b4a34';c.fillRect(px-12,py-16,24,18);c.fillStyle='#3ea371';
       for(let k=0;k<5;k++){c.beginPath();c.ellipse(px+Math.cos(k*1.3+Math.sin(this.t*.8)*.05)*9,py-28-Math.sin(k*1.9)*8,7,12,k,0,Math.PI*2);c.fill();}}
+  }
+  drawNeuralLinks(v){
+    const c=this.ctx,red=this.reduce();
+    c.save();
+    for(const role of officeRoles){
+      const d=DESKS[role.id],st=v.stages[role.id]?.status;
+      const sx=d.x,sy=d.y+6,ex=TABLE.x,ey=TABLE.y;
+      const cx=(sx+ex)/2+(d.x<TABLE.x?36:-36),cy=(sy+ey)/2+(d.y<TABLE.y?-18:18);
+      c.beginPath();c.moveTo(sx,sy);c.quadraticCurveTo(cx,cy,ex,ey);
+      c.strokeStyle=st==='done'?'rgba(45,212,191,.34)':st==='running'?'rgba(251,191,36,.52)':st==='failed'?'rgba(255,92,119,.32)':'rgba(100,130,170,.14)';
+      c.lineWidth=st==='running'?2.4:st==='done'?1.8:1.1;c.stroke();
+      if(!red&&(st==='running'||(st==='done'&&v.status==='running'))){
+        const u=((this.t*(st==='running'?0.85:0.42)+(officeOrder.indexOf(role.id)*0.17))%1);
+        const mu=1-u;
+        const px=mu*mu*sx+2*mu*u*cx+u*u*ex,py=mu*mu*sy+2*mu*u*cy+u*u*ey;
+        c.fillStyle=st==='running'?'#fde68a':role.color;
+        c.beginPath();c.arc(px,py,3.3,0,Math.PI*2);c.fill();
+      }
+    }
+    c.restore();
   }
   headline(v){
     if(v.replay)return '기록된 실제 단계를 순서대로 재생합니다';
@@ -208,6 +233,13 @@ class OfficeScene{
     const g=c.createLinearGradient(0,TABLE.y-TABLE.ry,0,TABLE.y+TABLE.ry);g.addColorStop(0,'#a07c58');g.addColorStop(1,'#7d5e41');
     c.fillStyle=g;c.beginPath();c.ellipse(TABLE.x,TABLE.y,TABLE.rx,TABLE.ry,0,0,Math.PI*2);c.fill();
     c.strokeStyle='rgba(255,255,255,.12)';c.lineWidth=2;c.beginPath();c.ellipse(TABLE.x,TABLE.y,TABLE.rx-12,TABLE.ry-8,0,0,Math.PI*2);c.stroke();
+    // 테이블 중앙 홀로그램 AI 코어 링
+    c.save();const spin=this.reduce()?0:this.t*(v.status==='running'?1.8:0.35);
+    c.strokeStyle=v.status==='running'?'rgba(45,212,191,.55)':'rgba(167,139,250,.32)';c.lineWidth=1.8;
+    c.beginPath();c.ellipse(TABLE.x,TABLE.y,44,18,0,spin,spin+Math.PI*1.35);c.stroke();
+    c.strokeStyle='rgba(45,212,191,.28)';c.lineWidth=1.2;
+    c.beginPath();c.ellipse(TABLE.x,TABLE.y,26,10.5,0,-spin*1.4,-spin*1.4+Math.PI*1.2);c.stroke();
+    c.fillStyle=v.status==='running'?'rgba(45,212,191,.35)':'rgba(167,139,250,.22)';c.beginPath();c.arc(TABLE.x,TABLE.y,5,0,Math.PI*2);c.fill();c.restore();
     // 테이블 위 서류: 완료한 보고서 수만큼
     const done=officeOrder.filter(id=>v.stages[id]?.status==='done').length;
     for(let i=0;i<done;i++){const a=(-90+i*45)*Math.PI/180;const px=TABLE.x+Math.cos(a)*(TABLE.rx-46),py=TABLE.y+Math.sin(a)*(TABLE.ry-22);

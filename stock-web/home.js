@@ -129,10 +129,61 @@ function renderHomePositions(a,fx){
   }).join('');
 }
 
+const homeKpiIcons=[
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 3.5 8-8.5"/><path d="M16 6h5v5"/></svg>',
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M17 7H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 14l3-3 2.5 2 3.5-4"/></svg>',
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18"/></svg>',
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"/><path d="M9.5 12l2 2 3.5-4"/></svg>',
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4a2 2 0 0 1-2-2V5h4M18 9h2a2 2 0 0 0 2-2V5h-4"/><path d="M6 4h12v6a6 6 0 0 1-12 0V4z"/><path d="M12 16v4M8 20h8"/></svg>'
+];
+let homeSection='all';
+function applyHomeSectionFilter(){
+  $('home-section-nav')?.querySelectorAll('button[data-home-filter]').forEach(x=>x.classList.toggle('active',x.dataset.homeFilter===homeSection));
+  document.querySelectorAll('#home-view [data-home-sec]').forEach(el=>el.classList.toggle('home-sec-hidden',homeSection!=='all'&&el.dataset.homeSec!==homeSection));
+}
+function renderHomePipeline(d,a){
+  const root=$('home-ai-pipeline');if(!root)return;
+  const order=['collect','filter','office','trade','learn'];
+  const labels={collect:'데이터 수집',filter:'멀티팩터 필터',office:'7역할 AI 회의',trade:'자동 주문·방어',learn:'마감 복기·진화'};
+  const running=a?.status==='running';
+  const officeRun=a?.office?.status==='running';
+  const phaseStr=String(a?.phase||'');
+  let active='collect';
+  if(!a)active='collect';
+  else if(officeRun)active='office';
+  else if(/review|복기|close|learn/i.test(phaseStr)||a?.learning?.running)active='learn';
+  else if(running){
+    const hasPos=Object.keys(a.positions||{}).length>0;
+    const hasTodayTrade=(a.trades||[]).some(t=>t.day===a.day);
+    active=(hasPos||hasTodayTrade||a.office?.status==='done')?'trade':'filter';
+  }
+  const activeIdx=Math.max(0,order.indexOf(active));
+  const statusEl=$('home-pipeline-status');
+  if(statusEl){
+    if(officeRun)statusEl.innerHTML='<span class="pulse-dot" aria-hidden="true"></span>AI 7역할 회의 진행 중';
+    else if(running)statusEl.innerHTML=`<span class="pulse-dot" aria-hidden="true"></span>24h 자율 순환 가동 · ${esc(labels[active])}`;
+    else statusEl.innerHTML=`<span class="pulse-dot paused" aria-hidden="true"></span>${a?'자율 루프 일시정지':'계좌 생성 대기'}`;
+  }
+  root.classList.toggle('is-paused',!running&&!officeRun);
+  root.querySelectorAll('.pipeline-node[data-stage]').forEach(node=>{
+    const idx=order.indexOf(node.dataset.stage);
+    node.classList.toggle('done',!!a&&idx<activeIdx);
+    node.classList.toggle('active',idx===activeIdx&&(running||officeRun||!a));
+    node.classList.toggle('ai-run',officeRun&&node.dataset.stage==='office');
+  });
+  const links=root.querySelectorAll('.pipeline-link');
+  links.forEach((lk,idx)=>{
+    lk.classList.toggle('done',!!a&&idx<activeIdx);
+    lk.classList.toggle('live',(running||officeRun)&&idx===activeIdx-1);
+  });
+}
+
 function renderHome(){
   const d=dbData;if(!d||!$('home'))return;const a=d.account,live=d.mode==='live';
   const fx=homeFx(d,a);
   renderGlobalPulse(d);
+  renderHomePipeline(d,a);
   $('home-greeting').textContent=homeGreeting();
   $('home-mode').querySelectorAll('button').forEach(b=>{b.classList.toggle('active',b.dataset.mode===d.mode);b.textContent=(b.dataset.mode==='live'?'실거래':'모의 운용')+(d.has[b.dataset.mode]?'':' (없음)');});
   const ai=d.connections?.claude||{},aiOk=ai.installed&&ai.authenticated;
@@ -195,12 +246,13 @@ function renderHome(){
     {k:'승률 · 손익비',v:rep.win_rate??0,f:v=>rep.win_rate==null?'집계 전':v.toFixed(0)+'%',sub:`정리 ${rep.closed_count||0}건 · 손익비 ${pfRatio}`}
   ];
   const box=$('home-kpis');
-  if(box.children.length!==kpis.length)box.innerHTML=kpis.map((x,i)=>`<div class="hkpi"><span>${x.k}</span><strong id="home-kpi-${i}"></strong><small id="home-kpi-sub-${i}"></small>${x.spark?'<canvas id="home-spark" class="hspark" aria-hidden="true"></canvas>':''}</div>`).join('');
+  if(box.children.length!==kpis.length)box.innerHTML=kpis.map((x,i)=>`<div class="hkpi"><div class="hkpi-top"><span>${x.k}</span><span class="hkpi-ico" aria-hidden="true">${homeKpiIcons[i]||''}</span></div><strong id="home-kpi-${i}"></strong><small id="home-kpi-sub-${i}"></small>${x.spark?'<canvas id="home-spark" class="hspark" aria-hidden="true"></canvas>':''}</div>`).join('');
   kpis.forEach((x,i)=>{const el=$('home-kpi-'+i);el.className=x.cls?(x.v>0?'up':x.v<0?'down':''):'';homeCountUp(el,x.v,x.f);$('home-kpi-sub-'+i).textContent=x.sub;});
   SQCharts.spark($('home-spark'),curve.slice(-200));
 
   renderHomeHorizons(a,fx);
   renderHomePositions(a,fx);
+  applyHomeSectionFilter();
 
   // 회의실 상태 문장
   $('home-office-state').textContent=$('office-launch-state')?.textContent||'';
@@ -377,6 +429,7 @@ action('nc-translate',async()=>{const r=await api('/news/translate','POST',{});n
 
 // ── 홈 보조 동작 ──────────────────────────────────────────────────────────
 $('home-mode').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{dbMode=b.dataset.mode;try{localStorage.setItem('sq-db-mode',dbMode);}catch(e){}loadDashboard().catch(e=>notify(e.message));}));
+$('home-section-nav')?.addEventListener('click',e=>{const b=e.target.closest('button[data-home-filter]');if(!b)return;homeSection=b.dataset.homeFilter;applyHomeSectionFilter();if(homeSection==='all'||homeSection==='charts'||homeSection==='ai')requestAnimationFrame(()=>renderHome());});
 $('home-range').addEventListener('click',e=>{const b=e.target.closest('[data-range]');if(!b)return;homeRange=Number(b.dataset.range);$('home-range').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));renderHome();});
 const homeBaseTab=tab;
 tab=function(id){const changed=document.body.dataset.tab!==id;document.body.dataset.tab=id;homeBaseTab(id);if(changed)window.scrollTo(0,0);};

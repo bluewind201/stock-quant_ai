@@ -169,7 +169,7 @@ with sync_playwright() as p:
     page = page_for({'width': 1440, 'height': 1000})
     assert page.locator('#home').is_visible() and not page.locator('#dashboard').is_visible(), '첫 화면은 홈'
     page.wait_for_timeout(1500)
-    assert page.locator('#home-kpis .hkpi').count() == 4
+    assert page.locator('#home-kpis .hkpi').count() == 6
     assert page.locator('#home-trades .htrade').count() == 5
     assert '손절' in page.locator('#home-trades').inner_text() and '익절' in page.locator('#home-trades').inner_text()
     assert page.locator('#home-mix-legend li').count() == 4

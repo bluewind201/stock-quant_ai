@@ -44,32 +44,51 @@ const SQCharts=(()=>{
   // 영역 선 차트: points=[{x:label/date, y:number}]
   function line(canvas,points,opt={}){
     if(!canvas)return;
-    const draw=()=>{
-      if(!points||points.length<2)return empty(canvas,opt.empty);
+    let lastHover=-1,hitCache=null,ready=false;
+    const renderFrame=(progress,hoverIdx=-1)=>{
       const c=palette(),color=opt.color||c.accent,format=opt.format||(v=>Math.round(v).toLocaleString('ko-KR'));
       const pad={l:10,r:62,t:14,b:24};
-      animate(canvas,progress=>{
-        const {ctx,w,h}=setup(canvas),ys=points.map(p=>p.y);
-        let [min,max]=niceScale(Math.min(...ys,opt.baseline??Infinity),Math.max(...ys,opt.baseline??-Infinity));
-        const X=i=>pad.l+(w-pad.l-pad.r)*i/(points.length-1),Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-min)/(max-min));
-        ctx.strokeStyle=c.line;ctx.lineWidth=1;ctx.fillStyle=c.muted;ctx.textAlign='left';
-        for(let i=0;i<=3;i++){const v=min+(max-min)*i/3,y=Y(v);ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.globalAlpha=1;ctx.fillText(format(v,true),w-pad.r+6,y);}
-        if(opt.baseline!=null&&opt.baseline>min&&opt.baseline<max){ctx.setLineDash([4,4]);ctx.strokeStyle=c.muted;ctx.beginPath();ctx.moveTo(pad.l,Y(opt.baseline));ctx.lineTo(w-pad.r,Y(opt.baseline));ctx.stroke();ctx.setLineDash([]);}
-        ctx.textAlign='center';const labels=[0,Math.floor((points.length-1)/2),points.length-1];
-        for(const i of [...new Set(labels)]){ctx.fillText(points[i].label||'',Math.min(Math.max(X(i),pad.l+24),w-pad.r-24),h-10);}
-        ctx.save();ctx.beginPath();ctx.rect(0,0,pad.l+(w-pad.l-pad.r)*progress+1,h);ctx.clip();
-        const grad=ctx.createLinearGradient(0,pad.t,0,h-pad.b);grad.addColorStop(0,color+'55');grad.addColorStop(1,color+'00');
-        ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(X(i),Y(p.y)):ctx.moveTo(X(i),Y(p.y)));
-        ctx.lineTo(X(points.length-1),h-pad.b);ctx.lineTo(X(0),h-pad.b);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
-        ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(X(i),Y(p.y)):ctx.moveTo(X(i),Y(p.y)));ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();ctx.restore();
-        if(progress>=1){const i=points.length-1;ctx.beginPath();ctx.arc(X(i),Y(points[i].y),4,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=c.panel;ctx.stroke();}
-        canvas._sqHit={X,Y,pad,w,h};
-      });
-      canvas.onmousemove=e=>{const hit=canvas._sqHit;if(!hit)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left;
+      const {ctx,w,h}=setup(canvas),ys=points.map(p=>p.y);
+      let [min,max]=niceScale(Math.min(...ys,opt.baseline??Infinity),Math.max(...ys,opt.baseline??-Infinity));
+      const X=i=>pad.l+(w-pad.l-pad.r)*i/(points.length-1),Y=v=>pad.t+(h-pad.t-pad.b)*(1-(v-min)/(max-min));
+      ctx.strokeStyle=c.line;ctx.lineWidth=1;ctx.fillStyle=c.muted;ctx.textAlign='left';
+      for(let i=0;i<=3;i++){const v=min+(max-min)*i/3,y=Y(v);ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.globalAlpha=1;ctx.fillText(format(v,true),w-pad.r+6,y);}
+      if(opt.baseline!=null&&opt.baseline>min&&opt.baseline<max){ctx.setLineDash([4,4]);ctx.strokeStyle=c.muted;ctx.beginPath();ctx.moveTo(pad.l,Y(opt.baseline));ctx.lineTo(w-pad.r,Y(opt.baseline));ctx.stroke();ctx.setLineDash([]);}
+      ctx.textAlign='center';const labels=[0,Math.floor((points.length-1)/2),points.length-1];
+      for(const i of [...new Set(labels)]){ctx.fillText(points[i].label||'',Math.min(Math.max(X(i),pad.l+24),w-pad.r-24),h-10);}
+      ctx.save();ctx.beginPath();ctx.rect(0,0,pad.l+(w-pad.l-pad.r)*progress+1,h);ctx.clip();
+      const grad=ctx.createLinearGradient(0,pad.t,0,h-pad.b);grad.addColorStop(0,color+'5c');grad.addColorStop(0.55,color+'1c');grad.addColorStop(1,color+'00');
+      ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(X(i),Y(p.y)):ctx.moveTo(X(i),Y(p.y)));
+      ctx.lineTo(X(points.length-1),h-pad.b);ctx.lineTo(X(0),h-pad.b);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+      ctx.save();ctx.shadowColor=color+'aa';ctx.shadowBlur=10;
+      ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(X(i),Y(p.y)):ctx.moveTo(X(i),Y(p.y)));ctx.strokeStyle=color;ctx.lineWidth=2.2;ctx.lineJoin='round';ctx.stroke();ctx.restore();
+      ctx.restore();
+      if(progress>=1){
+        ready=true;
+        if(hoverIdx>=0&&hoverIdx<points.length){
+          const hx=X(hoverIdx),hy=Y(points[hoverIdx].y);
+          ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle=color+'99';ctx.lineWidth=1;
+          ctx.beginPath();ctx.moveTo(hx,pad.t);ctx.lineTo(hx,h-pad.b);ctx.stroke();ctx.restore();
+          ctx.beginPath();ctx.arc(hx,hy,8,0,Math.PI*2);ctx.fillStyle=color+'33';ctx.fill();
+          ctx.beginPath();ctx.arc(hx,hy,4.5,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=c.panel;ctx.stroke();
+        }else{
+          const i=points.length-1;ctx.beginPath();ctx.arc(X(i),Y(points[i].y),7,0,Math.PI*2);ctx.fillStyle=color+'2b';ctx.fill();
+          ctx.beginPath();ctx.arc(X(i),Y(points[i].y),4,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=c.panel;ctx.stroke();
+        }
+      }
+      hitCache={X,Y,pad,w,h};
+    };
+    const draw=()=>{
+      if(!points||points.length<2)return empty(canvas,opt.empty);
+      const format=opt.format||(v=>Math.round(v).toLocaleString('ko-KR'));
+      ready=false;lastHover=-1;
+      animate(canvas,progress=>renderFrame(progress,lastHover));
+      canvas.onmousemove=e=>{const hit=hitCache;if(!hit)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left;
         const i=Math.max(0,Math.min(points.length-1,Math.round((x-hit.pad.l)/(hit.w-hit.pad.l-hit.pad.r)*(points.length-1))));
+        if(ready&&i!==lastHover){lastHover=i;renderFrame(1,i);}
         const p=points[i];showTip(`<b>${esc(p.tip||p.label||'')}</b><br>${esc(opt.name||'값')} ${esc(format(p.y))}${p.extra?'<br>'+esc(p.extra):''}`,e.clientX,e.clientY);
       };
-      canvas.onmouseleave=hideTip;
+      canvas.onmouseleave=()=>{hideTip();if(ready&&lastHover!==-1){lastHover=-1;renderFrame(1,-1);}};
     };
     remember(canvas,draw);draw();
   }
@@ -89,7 +108,9 @@ const SQCharts=(()=>{
         ctx.strokeStyle=c.line;ctx.fillStyle=c.muted;ctx.textAlign='left';
         for(const v of [max,0,min].filter((v,i,a)=>a.indexOf(v)===i)){ctx.beginPath();ctx.moveTo(pad.l,Y(v));ctx.lineTo(w-pad.r,Y(v));ctx.stroke();ctx.fillText(format(v,true),w-pad.r+6,Y(v));}
         rows.forEach((r,i)=>{const x=pad.l+slot*i+(slot-bw)/2,y=Y(r.value*progress),top=Math.min(y,zero),height=Math.max(1,Math.abs(zero-y));
-          ctx.fillStyle=r.value>=0?c.up:c.down;roundRect(ctx,x,top,bw,height,Math.min(4,bw/2));ctx.fill();});
+          const col=r.value>=0?c.up:c.down;const g=ctx.createLinearGradient(0,top,0,top+height);
+          g.addColorStop(0,r.value>=0?col:col+'66');g.addColorStop(1,r.value>=0?col+'66':col);
+          ctx.fillStyle=g;roundRect(ctx,x,top,bw,height,Math.min(4,bw/2));ctx.fill();});
         ctx.fillStyle=c.muted;ctx.textAlign='center';
         const step=Math.ceil(rows.length/6);rows.forEach((r,i)=>{if(i%step===0||i===rows.length-1)ctx.fillText(r.label,pad.l+slot*i+slot/2,h-10);});
         canvas._sqHit={pad,slot};
@@ -109,9 +130,11 @@ const SQCharts=(()=>{
       if(!total)return empty(canvas,opt.empty);
       const c=palette();
       animate(canvas,progress=>{
-        const {ctx,w,h}=setup(canvas),cx=w/2,cy=h/2,R=Math.min(w,h)/2-8,r=R*.64;let a=-Math.PI/2;const arcs=[];
-        for(const s of segments){const v=Math.max(0,s.value);if(!v)continue;const span=Math.PI*2*v/total*progress,gap=segments.length>1?0.025:0;
-          ctx.beginPath();ctx.arc(cx,cy,R,a+gap/2,a+span-gap/2);ctx.arc(cx,cy,r,a+span-gap/2,a+gap/2,true);ctx.closePath();ctx.fillStyle=s.color;ctx.fill();
+        const {ctx,w,h}=setup(canvas),cx=w/2,cy=h/2,R=Math.min(w,h)/2-10,r=R*.64;let a=-Math.PI/2;const arcs=[];
+        ctx.save();ctx.strokeStyle=c.line;ctx.lineWidth=1;ctx.setLineDash([3,4]);ctx.beginPath();ctx.arc(cx,cy,R+4,0,Math.PI*2);ctx.stroke();ctx.restore();
+        for(const s of segments){const v=Math.max(0,s.value);if(!v)continue;const span=Math.PI*2*v/total*progress,gap=segments.length>1?0.028:0;
+          ctx.save();ctx.shadowColor=s.color+'66';ctx.shadowBlur=7;
+          ctx.beginPath();ctx.arc(cx,cy,R,a+gap/2,a+span-gap/2);ctx.arc(cx,cy,r,a+span-gap/2,a+gap/2,true);ctx.closePath();ctx.fillStyle=s.color;ctx.fill();ctx.restore();
           arcs.push({start:a,end:a+span,s});a+=span;}
         ctx.textAlign='center';ctx.fillStyle=c.muted;ctx.font='11px "Segoe UI","Malgun Gothic",sans-serif';ctx.fillText(opt.title||'',cx,cy-11);
         ctx.fillStyle=c.text;ctx.font='700 16px "Segoe UI","Malgun Gothic",sans-serif';ctx.fillText(opt.value||'',cx,cy+9);
@@ -137,10 +160,12 @@ const SQCharts=(()=>{
         const {ctx,w}=setup(canvas),labelW=Math.min(150,w*.34),valueW=76,maxAbs=Math.max(0.5,...rows.map(r=>Math.abs(r.value)));
         const span=w-labelW-valueW-12,zero=labelW+span/2;
         ctx.strokeStyle=c.line;ctx.beginPath();ctx.moveTo(zero,4);ctx.lineTo(zero,rows.length*rowH+8);ctx.stroke();
-        rows.forEach((r,i)=>{const y=10+i*rowH,len=span/2*Math.abs(r.value)/maxAbs*progress;
+        rows.forEach((r,i)=>{const y=10+i*rowH,len=span/2*Math.abs(r.value)/maxAbs*progress,bx=r.value>=0?zero:zero-len,bw=Math.max(2,len);
           ctx.fillStyle=c.text;ctx.textAlign='left';ctx.font='12px "Segoe UI","Malgun Gothic",sans-serif';
           let label=r.label;while(ctx.measureText(label).width>labelW-8&&label.length>2)label=label.slice(0,-2)+'…';ctx.fillText(label,0,y+9);
-          ctx.fillStyle=r.value>=0?c.up:c.down;roundRect(ctx,r.value>=0?zero:zero-len,y+2,Math.max(2,len),14,4);ctx.fill();
+          const col=r.value>=0?c.up:c.down;const g=ctx.createLinearGradient(bx,0,bx+bw,0);
+          g.addColorStop(0,r.value>=0?col+'77':col);g.addColorStop(1,r.value>=0?col:col+'77');
+          ctx.fillStyle=g;roundRect(ctx,bx,y+2,bw,14,4);ctx.fill();
           ctx.fillStyle=c.muted;ctx.textAlign='right';ctx.fillText(format(r.value),w,y+9);});
         canvas._sqHit={rowH};
       });
