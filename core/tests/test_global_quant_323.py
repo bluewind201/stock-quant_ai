@@ -438,3 +438,59 @@ def test_v326_fundamentals_parallel_office_and_horizon_alignment(monkeypatch):
     assert plan['picks'][0]['symbol'] == '005930'
     assert plan['picks'][0]['horizon'] == 'long'
     assert plan['picks'][0]['max_entry_price'] >= 61200  # Bumped to avoid tight open gap block
+
+    # 3) Null/malformed fields coerce inside Report.model_validate AND total CLI outage still completes via quant-fallback
+    import json
+    import subprocess
+    from types import SimpleNamespace
+    from sqt.subscription_ai import SubscriptionAI, AIError
+    monkeypatch.setattr('sqt.subscription_ai.executable', lambda: 'fake-claude')
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: SimpleNamespace(
+        returncode=0,
+        stderr='',
+        stdout=json.dumps({
+            'is_error': False,
+            'structured_output': {
+                'summary': '',
+                'missing': None,
+                'findings': [{
+                    'symbol': '005930 (삼성전자)',
+                    'positive': None,
+                    'negative': None,
+                    'evidence_ids': None,
+                    'missing': None,
+                }],
+            },
+        }),
+    ))
+    sub = SubscriptionAI()
+    validated = sub._run(ai_office.Report, 'test', label='차트 분석가')
+    assert validated['summary'] and validated['findings'][0]['negative'] and validated['findings'][0]['evidence_ids'] == []
+
+    # Verify technical payload omits recent_bars & redundant daily copy
+    slim = ai_office._role_payload('technical', {
+        'candidates': [{
+            'symbol': '005930', 'name': '삼성전자', 'eligible_horizons': ['long'],
+            'portfolio': {'price': 60000, 'rsi14': 55, 'signals': {'long': {'eligible': True}}, 'extra_huge': 1},
+            'technical': {'daily': {'price': 60000}, 'intraday': {'recent_bars': [{'c': 1}] * 24}},
+            'fundamentals': {'per': '10'}, 'news': [{'title': 'x', 'body': 'y' * 500}],
+        }],
+        'office_evidence': [],
+    })
+    tc = slim['candidates'][0]
+    assert 'technical' not in tc and 'news' not in tc and 'fundamentals' not in tc and 'extra_huge' not in tc['portfolio']
+
+    # Verify all-role fallback completes without leaving technical in 'failed'
+    class AllOutageAI:
+        last_usage = {}
+        _usage_local = threading.local()
+        def _run(self, *a, **k):
+            raise AIError('AI 사용 한도 초과: simulated outage')
+        def _judge(self, *a, **k):
+            raise AIError('AI 사용 한도 초과: simulated outage')
+
+    ev_outage = []
+    outage_plan = ai_office.run(AllOutageAI(), snap, lambda *ev: ev_outage.append(ev))
+    assert not any(st == 'failed' for _, st, _ in ev_outage)
+    assert any(r == 'technical' and st == 'done' for r, st, _ in ev_outage)
+    assert outage_plan['picks'][0]['symbol'] == '005930'

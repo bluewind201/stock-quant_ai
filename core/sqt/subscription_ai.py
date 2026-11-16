@@ -20,6 +20,7 @@
     --model sonnet     기본값. SQT_AI_MODEL 로 바꿀 수 있다
     호출 횟수 자체는 SQT_AI_DAILY_BUDGET 이 따로 제한한다.
 """
+import contextlib
 import json
 import os
 import shutil
@@ -44,10 +45,11 @@ class AIQuotaError(AIError):
 
 def quota_error(detail):
     # Only call on provider failure fields, never on successful model output/news.
+    # Transient overload/529 is retried inside SubscriptionAI._run without blackholing the provider for 15m.
     return bool(re.search(
         r'rate[_ -]?limit|usage[_ -]?limit|quota[_ -]?(?:exceeded|exhausted)|'
         r'insufficient_quota|exceeded your current quota|(?:hit|reached|exceeded)\s+(?:your\s+|the\s+)?(?:usage\s+)?limit|'
-        r'overloaded|529|server[_ -]?overloaded|temporarily unavailable|capacity[_ -]?(?:exceeded|exhausted)|'
+        r'capacity[_ -]?(?:exceeded|exhausted)|'
         r'too many requests|사용(?:량)?\s*한도.*초과|한도\s*초과',
         str(detail), re.I))
 
@@ -380,6 +382,7 @@ class SubscriptionAI:
 
     def __init__(self):
         self.lock = threading.Lock()
+        self._cli_sem = threading.Semaphore(2)
         self._usage_local = threading.local()
         self.last_usage = {}
         self.model = os.getenv('SQT_AI_MODEL', '').strip() or 'claude-opus-5-5'
@@ -458,34 +461,42 @@ class SubscriptionAI:
             if cli_model != 'sonnet':
                 args += ['--fallback-model', 'sonnet']
             payload_input = prompt + '\n위 지침과 스냅샷에 따라 JSON만 반환하세요.'
-            try:
-                result = subprocess.run(args, input=payload_input,
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        timeout=timeout, cwd=str(root), **run_options())
-            except subprocess.TimeoutExpired:
-                raise AIError(f'{label}이 {timeout}초를 초과했습니다. 이번 결과는 폐기합니다.') from None
-            except OSError as exc:
-                raise AIError(f'{label} CLI 시작 실패 (OS errno={exc.errno}). 입력 전달·실행 파일·권한을 확인하세요.') from None
+            sem = getattr(self, '_cli_sem', None) or contextlib.nullcontext()
 
+            def _invoke(cmd_args):
+                with sem:
+                    try:
+                        return subprocess.run(cmd_args, input=payload_input,
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                              timeout=timeout, cwd=str(root), **run_options())
+                    except subprocess.TimeoutExpired:
+                        raise AIError(f'{label}이 {timeout}초를 초과했습니다. 이번 결과는 폐기합니다.') from None
+                    except OSError as exc:
+                        raise AIError(f'{label} CLI 시작 실패 (OS errno={exc.errno}). 입력 전달·실행 파일·권한을 확인하세요.') from None
+
+            result = _invoke(args)
             raw = (result.stdout or '').strip()
             combined_err = raw + '\n' + (result.stderr or '')
-            if (result.returncode and not quota_error(combined_err) and cli_model != 'sonnet'
-                    and re.search(r'model|not[_ ]found|unavailable|overloaded|entitle|access|invalid', combined_err, re.I)):
+            if (not quota_error(combined_err) and cli_model != 'sonnet'
+                    and (result.returncode or re.search(r'"is_error"\s*:\s*true', raw))
+                    and re.search(r'model|not[_ ]found|unavailable|overloaded|529|entitle|access|invalid|error_max_turns', combined_err, re.I)):
                 fb_args = [a for i, a in enumerate(args) if a != '--fallback-model' and (i == 0 or args[i - 1] != '--fallback-model')]
                 fb_args[fb_args.index('--model') + 1] = 'sonnet'
-                try:
-                    result = subprocess.run(fb_args, input=payload_input,
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                            timeout=timeout, cwd=str(root), **run_options())
-                    raw = (result.stdout or '').strip()
-                except subprocess.TimeoutExpired:
-                    raise AIError(f'{label}이 {timeout}초를 초과했습니다. 이번 결과는 폐기합니다.') from None
-                except OSError as exc:
-                    raise AIError(f'{label} CLI 시작 실패 (OS errno={exc.errno}). 입력 전달·실행 파일·권한을 확인하세요.') from None
+                result = _invoke(fb_args)
+                raw = (result.stdout or '').strip()
+
             if result.returncode and quota_error(raw + '\n' + (result.stderr or '')):
                 raise AIQuotaError('Claude 구독 사용 한도에 도달했습니다.')
             if result.returncode:
-                raise AIError(f'Claude 실행에 실패했습니다 ({label}). 토큰과 CLI 설치를 확인하세요.')
+                detail_hint = ''
+                if raw:
+                    try:
+                        err_obj = _parse_cli_json(raw)
+                        if isinstance(err_obj, dict):
+                            detail_hint = str(err_obj.get('result') or err_obj.get('subtype') or '')[:120]
+                    except ValueError:
+                        pass
+                raise AIError(f'Claude 실행에 실패했습니다 ({label}{": " + detail_hint if detail_hint else ""}). 토큰과 CLI 설치를 확인하세요.')
             if not raw:
                 # stderr 에는 경로나 자격증명이 섞일 수 있으므로 그대로 노출하지 않는다.
                 raise AIError(f'Claude 실행에 실패했습니다 ({label}). 토큰과 CLI 설치를 확인하세요.')
@@ -508,6 +519,13 @@ class SubscriptionAI:
                     raise AIQuotaError('Claude 구독 사용 한도에 도달했습니다.')
                 raise AIError(f'Claude 판단 실패 ({label}): {str(message)[:200]}')
             structured = payload.get('structured_output')
+            if structured is None:
+                res_txt = payload.get('result', '')
+                if isinstance(res_txt, str) and '{' in res_txt:
+                    try:
+                        structured = _parse_cli_json(res_txt)
+                    except ValueError:
+                        structured = None
             if structured is None:
                 if quota_error(payload.get('result', '')):
                     raise AIQuotaError('Claude 구독 사용 한도에 도달했습니다.')

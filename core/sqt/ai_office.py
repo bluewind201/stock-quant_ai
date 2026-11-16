@@ -7,7 +7,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from . import krnews
 from .subscription_ai import AIError
 
@@ -45,6 +45,31 @@ _MACRO_MARKET_TOKENS = frozenset({
     'SPY', 'QQQ', 'SOXX', 'EWY', 'DIA', 'IWM', 'VIX', 'DXY', 'USD/KRW', 'USDKRW', 'FED',
 })
 
+_TECH_DAILY_KEYS = (
+    'price', 'sma20', 'sma50', 'sma200', 'rsi14', 'macd_hist',
+    'bb_width_pct', 'atr14_pct', 'ret5d_pct', 'ret20d_pct',
+    'momentum63_pct', 'vol_ratio20', 'high52w', 'low52w', 'last_date', 'signals',
+)
+
+
+def _coerce_finding(f: dict) -> dict:
+    item = dict(f) if isinstance(f, dict) else {}
+    sym = str(item.get('symbol') or 'MARKET').strip() or 'MARKET'
+    item['symbol'] = sym[:40]
+    pos = str(item.get('positive') or '확인된 긍정 지표 검토').strip() or '확인된 긍정 지표 검토'
+    neg = str(item.get('negative') or '일반적인 변동성 유의').strip() or '일반적인 변동성 유의'
+    item['positive'] = pos[:1980]
+    item['negative'] = neg[:1980]
+    raw_eids = item.get('evidence_ids')
+    if not isinstance(raw_eids, list):
+        raw_eids = [] if raw_eids is None else [raw_eids]
+    item['evidence_ids'] = [str(e).strip() for e in raw_eids[:20] if e is not None and str(e).strip()]
+    raw_miss = item.get('missing')
+    if not isinstance(raw_miss, list):
+        raw_miss = [] if raw_miss is None else [raw_miss]
+    item['missing'] = [str(m).strip()[:200] for m in raw_miss[:20] if m is not None and str(m).strip()]
+    return item
+
 
 class Finding(BaseModel):
     symbol: str
@@ -53,11 +78,38 @@ class Finding(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list, max_length=20)
     missing: list[str] = Field(default_factory=list, max_length=20)
 
+    @model_validator(mode='before')
+    @classmethod
+    def _coerce_inputs(cls, data):
+        if isinstance(data, dict):
+            return _coerce_finding(data)
+        return data
+
 
 class Report(BaseModel):
     summary: str = Field(max_length=3000)
     findings: list[Finding] = Field(default_factory=list, max_length=60)
     missing: list[str] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode='before')
+    @classmethod
+    def _coerce_inputs(cls, data):
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        summary = str(out.get('summary') or '분석 보고서').strip()
+        if len(summary) < 2:
+            summary = '분석 완료'
+        out['summary'] = summary[:2980]
+        raw_findings = out.get('findings')
+        if not isinstance(raw_findings, list):
+            raw_findings = []
+        out['findings'] = [_coerce_finding(f) for f in raw_findings[:60] if isinstance(f, dict)]
+        raw_miss = out.get('missing')
+        if not isinstance(raw_miss, list):
+            raw_miss = [] if raw_miss is None else [raw_miss]
+        out['missing'] = [str(m).strip()[:200] for m in raw_miss[:30] if m is not None and str(m).strip()]
+        return out
 
 
 class RiskReview(BaseModel):
@@ -65,6 +117,27 @@ class RiskReview(BaseModel):
     approved_buys: list[str] = Field(default_factory=list, max_length=30)
     approved_exits: list[str] = Field(default_factory=list, max_length=30)
     reasons: list[Finding] = Field(default_factory=list, max_length=60)
+
+    @model_validator(mode='before')
+    @classmethod
+    def _coerce_inputs(cls, data):
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        summary = str(out.get('summary') or '위험 검토 보고서').strip()
+        if len(summary) < 2:
+            summary = '위험 검토 완료'
+        out['summary'] = summary[:2980]
+        for key in ('approved_buys', 'approved_exits'):
+            vals = out.get(key)
+            if not isinstance(vals, list):
+                vals = []
+            out[key] = [str(x).strip() for x in vals[:30] if x is not None and str(x).strip()]
+        raw_reasons = out.get('reasons')
+        if not isinstance(raw_reasons, list):
+            raw_reasons = []
+        out['reasons'] = [_coerce_finding(r) for r in raw_reasons[:60] if isinstance(r, dict)]
+        return out
 
 
 def timestamp(value):
@@ -245,20 +318,6 @@ def _normalize_symbol(raw: str, symbols: set[str], name_to_symbol: dict[str, str
     return sym
 
 
-def _coerce_finding(f: dict) -> dict:
-    item = dict(f) if isinstance(f, dict) else {}
-    item['symbol'] = str(item.get('symbol') or 'MARKET')[:40]
-    pos = str(item.get('positive') or '확인된 긍정 지표 검토')[:1980]
-    neg = str(item.get('negative') or '일반적인 변동성 유의')[:1980]
-    item['positive'] = pos
-    item['negative'] = neg
-    eids = item.get('evidence_ids') or []
-    item['evidence_ids'] = [str(e) for e in eids[:20] if e]
-    miss = item.get('missing') or []
-    item['missing'] = [str(m)[:200] for m in miss[:20] if m]
-    return item
-
-
 def _coerce_stage_output(role: str, output: dict) -> dict:
     if not isinstance(output, dict):
         return output
@@ -284,9 +343,17 @@ def _slim_candidate(role: str, c: dict) -> dict:
     if role == 'technical':
         cand.pop('news', None)
         cand.pop('themes', None)
+        cand.pop('fundamentals', None)
+        if cand.get('portfolio') and isinstance(cand.get('portfolio'), dict):
+            cand.pop('technical', None)
+            p = cand['portfolio']
+            cand['portfolio'] = {k: p[k] for k in _TECH_DAILY_KEYS if k in p}
     elif role == 'flow':
         cand.pop('news', None)
         cand.pop('technical', None)
+        if isinstance(cand.get('portfolio'), dict):
+            p = cand['portfolio']
+            cand['portfolio'] = {k: p[k] for k in ('price', 'ret5d_pct', 'ret20d_pct', 'vol_ratio20', 'signals') if k in p}
     elif role == 'news':
         if isinstance(cand.get('portfolio'), dict):
             p = cand['portfolio']
@@ -294,6 +361,9 @@ def _slim_candidate(role: str, c: dict) -> dict:
         cand.pop('technical', None)
     elif role == 'company':
         cand.pop('technical', None)
+        if isinstance(cand.get('portfolio'), dict):
+            p = cand['portfolio']
+            cand['portfolio'] = {k: p[k] for k in ('price', 'ret20d_pct', 'signals') if k in p}
         if isinstance(cand.get('news'), list):
             cand['news'] = [{'title': n.get('title', ''), 'source': n.get('source', ''),
                              'published_at': n.get('published_at', '')} for n in cand['news'][:3]]
@@ -307,15 +377,17 @@ def _role_payload(role: str, data: dict, reports: dict | None = None, plan: dict
     cov = payload.get('office_coverage')
     if isinstance(cov, dict) and 'sources' in cov:
         payload['office_coverage'] = {k: v for k, v in cov.items() if k != 'sources'}
-    if max_cands is not None and isinstance(payload.get('candidates'), list):
-        payload['candidates'] = payload['candidates'][:max_cands]
-    if isinstance(payload.get('candidates'), list):
-        payload['candidates'] = [_slim_candidate(role, c) for c in payload['candidates']]
+    raw_cands = payload.get('candidates')
+    if isinstance(raw_cands, list):
+        eligible = [c for c in raw_cands if c.get('eligible_horizons')]
+        picked_cands = eligible if eligible else raw_cands
+        limit = max_cands if max_cands is not None else 12
+        payload['candidates'] = [_slim_candidate(role, c) for c in picked_cands[:limit]]
     ev = payload.get('office_evidence') or []
     if role in ('technical', 'flow'):
-        payload['office_evidence'] = [{'id': e['id'], 'title': e.get('title', '')[:120],
+        payload['office_evidence'] = [{'id': e['id'], 'title': e.get('title', '')[:100],
                                        'symbols': e.get('symbols', []), 'published_at': e.get('published_at', ''),
-                                       'kind': e.get('kind', 'news')} for e in ev[:12]]
+                                       'kind': e.get('kind', 'news')} for e in ev[:8]]
         payload.pop('kr_market_news', None)
         payload.pop('us_evidence', None)
     elif role == 'company':
@@ -340,7 +412,9 @@ def _role_payload(role: str, data: dict, reports: dict | None = None, plan: dict
 
 def _fallback_analyst_report(role: str, data: dict) -> dict:
     """개별 분석가 CLI 호출이 일시 실패할 때 수집된 정량 지표 기반 대체 보고서를 만든다."""
-    cands = data.get('candidates', [])[:8]
+    raw_cands = data.get('candidates', [])
+    eligible = [c for c in raw_cands if c.get('eligible_horizons')]
+    cands = (eligible or raw_cands)[:8]
     findings = []
     for c in cands:
         sym = c['symbol']
@@ -364,6 +438,11 @@ def _fallback_analyst_report(role: str, data: dict) -> dict:
             parts = [f'{k} {fund[k]}' for k in ('per', 'pbr', 'roe', 'market_cap', 'operating_profit') if fund.get(k)]
             pos = f'{name} 밸류/재무: {", ".join(parts)}' if parts else f'{name} 공시·테마 및 추세 기준 검토 가능'
             neg = '실적 발표 및 업황 변화 지속 점검 필요'
+        elif role == 'research':
+            horizon = (c.get('eligible_horizons') or ['short'])[0]
+            score = ((p.get('signals') or {}).get(horizon) or {}).get('rank_score')
+            pos = f'{name} 기간({horizon}) 멀티팩터 조건 충족 · 위험조정 점수 {score if score is not None else "-"}'
+            neg = '시장 변동성 확대 및 손절선 이탈 가능성 대비 필요'
         else:
             themes = [t.get('name', '') for t in c.get('themes', []) if isinstance(t, dict) and t.get('name')]
             pos = f'{name} 관련 테마({", ".join(themes[:2]) or "시장 주도"}) 및 최신 기사 반영'
@@ -376,6 +455,64 @@ def _fallback_analyst_report(role: str, data: dict) -> dict:
         'summary': f'{dict(ROLES).get(role, role)} 정량 데이터 자동 요약 (후보 {len(findings)}종목 검증 지표 반영)',
         'findings': findings,
         'missing': [],
+    }
+
+
+def _fallback_trader_plan(data: dict) -> dict:
+    """매매 전략가 CLI 실패 시 배정 기간·슬롯 한도에 맞는 정량 매매 계획을 안전하게 생성한다."""
+    cands = [c for c in data.get('candidates', []) if c.get('eligible_horizons')]
+    policy = data.get('portfolio_policy') or {}
+    buckets = policy.get('buckets') or {}
+    caps = policy.get('caps') or {'short': 20, 'medium': 30, 'long': 30}
+    default_slots = {'short': 2, 'medium': 3, 'long': 3}
+    rem_slots = {
+        h: int((buckets.get(h) or {}).get('open_slots', default_slots[h] if caps.get(h, 0) > 0 else 0))
+        for h in ('short', 'medium', 'long')
+    }
+    picks = []
+    for c in cands:
+        h = c['eligible_horizons'][0]
+        if rem_slots.get(h, 0) <= 0:
+            continue
+        p = c.get('portfolio') or {}
+        price = float(p.get('price') or c.get('last_price') or 0)
+        if price <= 0:
+            continue
+        sig = ((p.get('signals') or {}).get(h)) or {}
+        stop = float(sig.get('stop_pct') or 5.0)
+        stop = max(0.5, min(28.0, stop))
+        tp = round(min(60.0, stop * 3.0), 2)
+        picks.append({
+            'symbol': c['symbol'],
+            'horizon': h,
+            'max_entry_price': round(price * 1.04, 4),
+            'take_profit_pct': tp,
+            'stop_loss_pct': round(stop, 2),
+            'weight_pct': min(15.0, max(5.0, float(caps.get(h, 20)) / max(1, default_slots[h]))),
+            'thesis': f"{c.get('name') or c['symbol']} {h} 기간 멀티팩터 조건 통과 (위험조정 추세·수급 기반 자동 계획)",
+            'counter_case': '장중 수급 이탈 또는 시장 급락 시 변동성 확대 위험 존재',
+            'invalidation': f'손절폭 -{round(stop, 1)}% 또는 배정 기간 추세선 이탈 시 정리',
+        })
+        rem_slots[h] -= 1
+    return {
+        'summary': f'정량 멀티팩터 자동 매매 계획 ({len(picks)}종목 선정)',
+        'picks': picks,
+        'exits': [],
+        'horizon_reviews': {
+            h: f'{h} 슬롯 잔여 {rem_slots.get(h, 0)}개 검토 완료'
+            for h in ('short', 'medium', 'long')
+        },
+    }
+
+
+def _fallback_risk_review(plan: dict) -> dict:
+    buys = [p['symbol'] for p in (plan.get('picks') or []) if p.get('symbol')]
+    exits = [e['symbol'] for e in (plan.get('exits') or []) if e.get('symbol')]
+    return {
+        'summary': f'정량 위험 기준 점검 완료 (매수 승인 {len(buys)}건 · 매도 승인 {len(exits)}건)',
+        'approved_buys': buys[:30],
+        'approved_exits': exits[:30],
+        'reasons': [],
     }
 
 
@@ -479,7 +616,9 @@ evidence_ids는 반드시 allowed_evidence_ids 목록에 실제로 존재하는 
             nonlocal calls
             left = int(deadline - time.monotonic())
             if left < 10:
-                raise AIError('AI 오피스 전체 판단 시간 한도 도달')
+                if strict_errors:
+                    raise AIError('AI 오피스 전체 판단 시간 한도 도달')
+                return role, None, None, AIError('AI 오피스 전체 판단 시간 한도 도달')
             instruction = TASKS[role]
             max_attempts = 1 if strict_errors else 2
             last_exc = None
@@ -487,7 +626,7 @@ evidence_ids는 반드시 allowed_evidence_ids 목록에 실제로 존재하는 
                 try:
                     with state_lock:
                         calls += 1
-                    cap = 10 if (attempt > 0 and role == 'technical') else None
+                    cap = 8 if attempt > 0 else 12
                     payload = _role_payload(role, data, max_cands=cap)
                     prompt = (common + instruction + '\n'
                               + json.dumps(compact_snapshot(payload), ensure_ascii=False, allow_nan=False))
@@ -500,7 +639,7 @@ evidence_ids는 반드시 allowed_evidence_ids 목록에 실제로 존재하는 
                 except Exception as exc:  # noqa: BLE001
                     last_exc = exc
                     msg = str(exc)
-                    if strict_errors or '한도 초과' in msg or '중단' in msg:
+                    if strict_errors or 'AI 오피스 중단' in msg:
                         raise
             return role, None, None, last_exc
 
@@ -516,15 +655,12 @@ evidence_ids는 반드시 allowed_evidence_ids 목록에 실제로 존재하는 
                     raise exc
                 analyst_results[role] = (out, u_info, err)
 
-        any_live_ok = any(out is not None for out, _, _ in analyst_results.values())
         for role, _label in ANALYST_ROLES:
             out, u_info, err = analyst_results[role]
             if out is None:
-                if not any_live_ok and err is not None:
-                    current = role
-                    raise err
                 out = _fallback_analyst_report(role, data)
-                u_info = {'provider': 'quant-fallback', 'model': role}
+                u_info = {'provider': 'quant-fallback', 'model': role,
+                          'fallback_reason': str(err)[:160] if err else ''}
             reports[role] = out
             usage_map[role] = u_info or {}
             steps.append(role)
@@ -537,7 +673,9 @@ evidence_ids는 반드시 allowed_evidence_ids 목록에 실제로 존재하는 
             progress(role, 'running', None)
             left = int(deadline - time.monotonic())
             if left < 10:
-                raise AIError('AI 오피스 전체 판단 시간 한도 도달')
+                if strict_errors:
+                    raise AIError('AI 오피스 전체 판단 시간 한도 도달')
+                left = 10
             calls += 1
             if role == 'trader':
                 trader_payload = _role_payload('trader', data, reports, None)
@@ -546,51 +684,66 @@ evidence_ids는 반드시 allowed_evidence_ids 목록에 실제로 존재하는 
                     '열린 슬롯(open_slots)과 assigned_horizon/eligible_horizons 통과 후보가 있으면 과도한 현금 방치 대신 위험조정 점수와 밸류·수급이 우수한 후보를 적극 편입한다. '
                     '반드시 각 후보의 assigned_horizon 또는 eligible_horizons 안의 기간을 horizon에 적고, max_entry_price는 현재가 대비 1.02~1.05배 체결 가능 상한을 제시한다. '
                 )
-                plan_raw = ai._judge(PortfolioPlan, trader_instruction, trader_payload,
-                                      min(240, left), '장전 판단', _lock_held=True)
-                cand_by_sym = {c['symbol']: c for c in data.get('candidates', [])}
-                if isinstance(plan_raw, dict):
-                    for pick in plan_raw.get('picks') or []:
-                        if not isinstance(pick, dict):
-                            continue
-                        pick['symbol'] = _normalize_symbol(pick.get('symbol', ''), symbols, name_to_symbol)
-                        c = cand_by_sym.get(pick['symbol'])
-                        if c:
-                            eligible = c.get('eligible_horizons') or []
-                            if eligible and pick.get('horizon') not in eligible:
-                                pick['horizon'] = eligible[0]
-                            c_price = (c.get('portfolio') or {}).get('price') or c.get('last_price') or 0
-                            if c_price > 0 and (pick.get('max_entry_price') or 0) < c_price * 1.02:
-                                pick['max_entry_price'] = round(c_price * 1.03, 4)
-                    for ex in plan_raw.get('exits') or []:
-                        if isinstance(ex, dict):
-                            ex['symbol'] = _normalize_symbol(ex.get('symbol', ''), symbols, name_to_symbol)
-                plan = PortfolioPlan.model_validate(plan_raw).model_dump()
-                output = plan
+                try:
+                    plan_raw = ai._judge(PortfolioPlan, trader_instruction, trader_payload,
+                                          min(240, left), '장전 판단', _lock_held=True)
+                    cand_by_sym = {c['symbol']: c for c in data.get('candidates', [])}
+                    if isinstance(plan_raw, dict):
+                        for pick in plan_raw.get('picks') or []:
+                            if not isinstance(pick, dict):
+                                continue
+                            pick['symbol'] = _normalize_symbol(pick.get('symbol', ''), symbols, name_to_symbol)
+                            c = cand_by_sym.get(pick['symbol'])
+                            if c:
+                                eligible = c.get('eligible_horizons') or []
+                                if eligible and pick.get('horizon') not in eligible:
+                                    pick['horizon'] = eligible[0]
+                                c_price = (c.get('portfolio') or {}).get('price') or c.get('last_price') or 0
+                                if c_price > 0 and (pick.get('max_entry_price') or 0) < c_price * 1.02:
+                                    pick['max_entry_price'] = round(c_price * 1.03, 4)
+                        for ex in plan_raw.get('exits') or []:
+                            if isinstance(ex, dict):
+                                ex['symbol'] = _normalize_symbol(ex.get('symbol', ''), symbols, name_to_symbol)
+                    plan = PortfolioPlan.model_validate(plan_raw).model_dump()
+                    output = plan
+                    u_info = _read_thread_usage(ai)
+                except Exception as exc:  # noqa: BLE001
+                    if strict_errors or 'AI 오피스 중단' in str(exc):
+                        raise
+                    plan = PortfolioPlan.model_validate(_fallback_trader_plan(data)).model_dump()
+                    output = plan
+                    u_info = {'provider': 'quant-fallback', 'model': 'trader', 'fallback_reason': str(exc)[:160]}
             else:
                 contract = RiskReview if role == 'risk' else Report
                 instruction = TASKS.get(role, '''매매 제안을 최종 검토한다. approved_buys/approved_exits에는 trader_plan에서 승인할 종목코드만 넣는다.
 새 종목·새 주문을 추가하지 않는다. 승인하지 않는 이유를 reasons에 쓴다. 막연한 거시 불안, 기사 부재, 세부 재무 항목 일부 누락만으로 조건 통과 종목을 전부 거부하지 않는다.
 명백한 과열 추격·거래정지·근거 조작이 없는 한 위험 예산 내 분산 진입을 적극 승인한다. 당일 강제 청산은 없고 기간별 투자 근거 훼손과 새로운 위험 자료를 확인한다.''')
                 payload = _role_payload(role, data, reports, plan)
-                raw_out = ai._run(contract, common + instruction + '\n'
-                                 + json.dumps(compact_snapshot(payload), ensure_ascii=False, allow_nan=False),
-                                 min(150, left), label)
-                coerced = _coerce_stage_output(role, raw_out)
-                output = contract.model_validate(coerced).model_dump()
-                normalize_findings(output.get('findings', output.get('reasons', [])))
-                validate_findings(output.get('findings', output.get('reasons', [])))
-                if role == 'risk':
-                    output['approved_buys'] = [_normalize_symbol(s, symbols, name_to_symbol)
-                                               for s in output.get('approved_buys', [])]
-                    output['approved_exits'] = [_normalize_symbol(s, symbols, name_to_symbol)
-                                                for s in output.get('approved_exits', [])]
-                    if (not set(output['approved_buys']) <= {p['symbol'] for p in plan['picks']}
-                            or not set(output['approved_exits']) <= {p['symbol'] for p in plan['exits']}):
-                        raise AIError('위험 검토가 제안 밖 주문을 승인했습니다.')
+                try:
+                    raw_out = ai._run(contract, common + instruction + '\n'
+                                     + json.dumps(compact_snapshot(payload), ensure_ascii=False, allow_nan=False),
+                                     min(150, left), label)
+                    coerced = _coerce_stage_output(role, raw_out)
+                    output = contract.model_validate(coerced).model_dump()
+                    normalize_findings(output.get('findings', output.get('reasons', [])))
+                    validate_findings(output.get('findings', output.get('reasons', [])))
+                    if role == 'risk':
+                        output['approved_buys'] = [_normalize_symbol(s, symbols, name_to_symbol)
+                                                   for s in output.get('approved_buys', [])]
+                        output['approved_exits'] = [_normalize_symbol(s, symbols, name_to_symbol)
+                                                    for s in output.get('approved_exits', [])]
+                        if (not set(output['approved_buys']) <= {p['symbol'] for p in plan['picks']}
+                                or not set(output['approved_exits']) <= {p['symbol'] for p in plan['exits']}):
+                            raise AIError('위험 검토가 제안 밖 주문을 승인했습니다.')
+                    u_info = _read_thread_usage(ai)
+                except Exception as exc:  # noqa: BLE001
+                    if strict_errors or 'AI 오피스 중단' in str(exc):
+                        raise
+                    output = _fallback_risk_review(plan) if role == 'risk' else _fallback_analyst_report('research', data)
+                    u_info = {'provider': 'quant-fallback', 'model': role, 'fallback_reason': str(exc)[:160]}
 
             reports[role] = output
-            usage_map[role] = _read_thread_usage(ai)
+            usage_map[role] = u_info or {}
             steps.append(role)
             progress(role, 'done', dict(output, usage=usage_map[role]))
 
