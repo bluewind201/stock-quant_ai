@@ -6,11 +6,11 @@
 // - '지난 회의 다시 보기'는 저장된 마지막 기록을 순서대로 재생하며 화면에 '다시 보기'로 표시한다.
 // - 동작 줄이기 설정이면 이동·입자 효과 없이 최종 위치만 그린다.
 const officeRoles=[
-  {id:'collect',label:'자료 수집원',short:'자료',color:'#69c9ff',hair:'#2b2b3a',skin:'#f1c7a1',item:'papers',work:'기사를 모으는 중'},
-  {id:'technical',label:'차트 분석가',short:'차트',color:'#55e4bf',hair:'#e6c07b',skin:'#f6d3b3',item:'glasses',work:'일봉과 추세를 보는 중'},
-  {id:'flow',label:'수급·심리 분석가',short:'수급',color:'#f3be72',hair:'#3a2a20',skin:'#d9a47c',item:'headset',work:'외국인·기관 수급 확인 중'},
-  {id:'news',label:'뉴스·거시 분석가',short:'뉴스',color:'#b5a1ff',hair:'#1f2433',skin:'#f1c7a1',item:'paper',work:'뉴스와 경제 일정 읽는 중'},
-  {id:'company',label:'기업·공시 분석가',short:'기업',color:'#f29bbb',hair:'#7a4b2a',skin:'#e8b894',item:'tie',work:'기업 소식 검토 중'},
+  {id:'collect',label:'자료 수집원',short:'자료',color:'#69c9ff',hair:'#2b2b3a',skin:'#f1c7a1',item:'papers',work:'기사·재무 수집 중'},
+  {id:'technical',label:'차트 분석가',short:'차트',color:'#55e4bf',hair:'#e6c07b',skin:'#f6d3b3',item:'glasses',work:'일봉·추세 분석 중'},
+  {id:'flow',label:'수급·심리 분석가',short:'수급',color:'#f3be72',hair:'#3a2a20',skin:'#d9a47c',item:'headset',work:'외국인·기관 수급 분석 중'},
+  {id:'news',label:'뉴스·거시 분석가',short:'뉴스',color:'#b5a1ff',hair:'#1f2433',skin:'#f1c7a1',item:'paper',work:'거시·테마 뉴스 분석 중'},
+  {id:'company',label:'기업·공시 분석가',short:'기업',color:'#f29bbb',hair:'#7a4b2a',skin:'#e8b894',item:'tie',work:'재무·공시·기업 분석 중'},
   {id:'research',label:'찬반 리서치',short:'찬반',color:'#8ed6b1',hair:'#c9cfd8',skin:'#f6d3b3',item:'marker',work:'찬성·반대 근거 정리 중'},
   {id:'trader',label:'매매 전략가',short:'전략',color:'#8baeff',hair:'#2b2b3a',skin:'#d9a47c',item:'tablet',work:'기간별 매매 계획 작성 중'},
   {id:'risk',label:'위험 관리자',short:'위험',color:'#e6b47f',hair:'#5a3b2a',skin:'#f1c7a1',item:'shield',work:'계획의 위험을 검토 중'}];
@@ -55,15 +55,19 @@ class OfficeScene{
   update(account){this.account=account;this.run=account?.office||null;}
   startReplay(){
     const run=this.run;if(!run||!run.stages||!Object.keys(run.stages).length)return false;
-    this.replay={start:performance.now(),run,order:[...officeOrder,'office'].filter(id=>run.stages[id])};return true;
+    const timeline=[['collect'],['technical','flow','news','company'],['research'],['trader'],['risk'],['office']]
+      .map(g=>g.filter(id=>run.stages[id])).filter(g=>g.length);
+    this.replay={start:performance.now(),run,timeline};return true;
   }
   view(){
-    // 지금 그릴 상태. 다시 보기면 기록을 시간에 따라 펼친다.
+    // 지금 그릴 상태. 다시 보기면 자료 수집 후 4대 분석가 멀티 동시 실행 타임라인을 재생한다.
     if(this.replay){
-      const elapsed=(performance.now()-this.replay.start)/1000,each=3.4,order=this.replay.order,stages={};
-      order.forEach((id,i)=>{const st=this.replay.run.stages[id];const s=i*each,e=s+each;
-        if(elapsed>=e)stages[id]=st;else if(elapsed>=s)stages[id]=st.status==='failed'?st:{...st,status:'running',output:undefined};});
-      const doneAt=order.length*each;
+      const elapsed=(performance.now()-this.replay.start)/1000,each=3.2,groups=this.replay.timeline,stages={};
+      groups.forEach((grp,i)=>{const s=i*each,e=s+each;
+        for(const id of grp){const st=this.replay.run.stages[id];
+          if(elapsed>=e)stages[id]=st;
+          else if(elapsed>=s)stages[id]=st.status==='failed'?st:{...st,status:'running',output:undefined};}});
+      const doneAt=groups.length*each;
       if(elapsed>doneAt+9){this.replay=null;if(this.opt.onReplayEnd)this.opt.onReplayEnd();return this.view();}
       return {stages,status:elapsed>=doneAt?this.replay.run.status:'running',replay:true,run:this.replay.run};
     }
@@ -196,7 +200,7 @@ class OfficeScene{
     const s=this.account;if(s.config?.strategy!=='portfolio')return '기간별 포트폴리오 전략에서 동작합니다';
     if(s.config?.ai_office===false)return 'AI 회의실 꺼짐 · 단일 판단 사용 중';
     if(!v.run)return window.officeMeetingReason||'다음 예약 판단(장전·정오·오후)을 기다리는 중';
-    if(v.status==='running'){const cur=officeRoles.find(r=>v.stages[r.id]?.status==='running');return cur?`${cur.label}: ${cur.work}`:'회의 진행 중';}
+    if(v.status==='running'){const cur=officeRoles.filter(r=>v.stages[r.id]?.status==='running');if(cur.length>1)return `${cur.map(r=>r.short).join('·')} 멀티 동시 분석 중 (${cur.length}명)`;return cur[0]?`${cur[0].label}: ${cur[0].work}`:'회의 진행 중';}
     if(v.status==='done')return '회의 완료 · '+officeText(v.stages.office?.output?.summary||v.run.application||'',36);
     return (officeStateNames[v.status]||v.status)+' · '+(v.run.application||'');
   }
@@ -327,9 +331,9 @@ class OfficeScene{
         c.strokeStyle=p.role.color;c.lineWidth=1;c.stroke();
         c.fillStyle='#0f172a';c.textAlign='center';c.textBaseline='middle';c.fillText(p.role.label,p.x,y);}
     }
-    // 작업 중 말풍선은 한 명만(가장 최근 단계), 회의 대화는 말하는 사람 한 명
+    // 동시에 작업 중인 분석가 전원에게 말풍선 표시(멀티 병렬 분석), 회의 대화는 말하는 사람 한 명
     const running=v.status==='running'?officeRoles.filter(r=>this.people[r.id].status==='running'):[];
-    for(const r of running.slice(-1)){const p=this.people[r.id];if(p.pose==='present')continue;const dots='.'.repeat(1+Math.floor(this.t*2.5)%3);this.bubble(p.x,(p.headY||p.y-70)-24,r.work+dots,r.color,true);}
+    for(const r of running){const p=this.people[r.id];if(p.pose==='present')continue;const dots='.'.repeat(1+Math.floor(this.t*2.5)%3);this.bubble(p.x,(p.headY||p.y-70)-24,r.work+dots,r.color,true);}
     if(this.talk.role&&this.talk.line){const p=this.people[this.talk.role];this.bubble(p.x,(p.headY||p.y-70)-24,this.talk.line,p.role.color,false);}
   }
   drawStamp(){
@@ -391,6 +395,6 @@ const officeBanner=document.createElement('div');officeBanner.className='office-
 terminalDb.insertBefore(officeBanner,terminalSwitch);
 $('office-open').addEventListener('click',()=>tab('office'));
 // 계좌 설정: AI 회의실 사용 여부 (저장되는 설정. 화면 조작만으로 판단을 시작하지 않는다)
-$('portfolio-fields').insertAdjacentHTML('beforeend','<label class="check"><input id="portfolio-ai-office" type="checkbox" checked> AI 회의실: 네 분야 분석·찬반 리서치·매매·위험 검토</label><p class="small muted">예약 판단 1회당 최대 7개 역할 호출을 순차 실행합니다. 구독 사용량과 판단 시간이 늘어납니다. 끄면 기존 단일 판단을 사용합니다.</p>');
+$('portfolio-fields').insertAdjacentHTML('beforeend','<label class="check"><input id="portfolio-ai-office" type="checkbox" checked> AI 회의실: 4대 분석가 멀티 동시 분석 · 찬반 · 매매 · 위험</label><p class="small muted">자료 수집 후 4개 분야(차트·수급·뉴스·기업) 멀티 동시 분석 → 찬반 리서치 → 매매 전략 → 위험 검토 순으로 진행합니다. 끄면 기존 단일 판단을 사용합니다.</p>');
 const officeForm=portfolioForm;portfolioForm=function(c){officeForm(c);if(c)$('portfolio-ai-office').checked=c.ai_office!==false;};
 const officeConfig=dtConfig;dtConfig=function(){return {...officeConfig(),ai_office:$('portfolio-ai-office').checked};};

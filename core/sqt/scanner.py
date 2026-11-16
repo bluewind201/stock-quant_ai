@@ -223,6 +223,13 @@ def premarket_scan(broker, overrides: dict[str, Any] | None = None) -> dict[str,
     # Expensive chart reads only for the shortlisted names. Missing data is explicit.
     charts=chart_batch(broker,[entry['symbol'] for entry in candidates],started)
     for entry in candidates:entry['technical']=charts[entry['symbol']]
+    def _attach_fund(entry):
+        try:
+            entry['fundamentals'] = krnews.stock_fundamentals(entry['symbol'], market='KR', exchange='KRX')
+        except Exception:  # noqa: BLE001
+            entry['fundamentals'] = {}
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix='fund-read') as fund_exec:
+        list(fund_exec.map(_attach_fund, candidates))
 
     return {
         'scanned_at': started.isoformat(timespec='seconds'),

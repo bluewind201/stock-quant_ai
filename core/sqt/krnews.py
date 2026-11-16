@@ -33,6 +33,9 @@ log = logging.getLogger('bqt.krnews')
 
 KST = timezone(timedelta(hours=9))
 NAVER_NEWS = 'https://m.stock.naver.com/api/news/stock/{code}'
+NAVER_INTEGRATION = 'https://m.stock.naver.com/api/stock/{code}/integration'
+NAVER_FINANCE_ANNUAL = 'https://m.stock.naver.com/api/stock/{code}/finance/annual'
+NAVER_US_BASIC = 'https://api.stock.naver.com/stock/{code}/basic'
 GOOGLE_RSS = 'https://news.google.com/rss/search'
 MOBILE_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
 DESKTOP_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
@@ -200,3 +203,139 @@ def market_news(hours: int = 24, per_topic: int = 8, ttl: float = 600.0) -> list
             merged.append(dict(row, topic=topic))
     merged.sort(key=lambda r: r.get('published_at') or '', reverse=True)
     return merged
+
+
+_FUNDAMENTAL_CODE_MAP: dict[str, str] = {
+    'marketValue': 'market_cap',
+    'foreignRate': 'foreign_rate',
+    'per': 'per',
+    'eps': 'eps',
+    'cnsPer': 'forward_per',
+    'cnsEps': 'forward_eps',
+    'pbr': 'pbr',
+    'bps': 'bps',
+    'dividendYieldRatio': 'dividend_yield',
+    'highPriceOf52Weeks': 'high_52w',
+    'lowPriceOf52Weeks': 'low_52w',
+    'industryGroupKor': 'sector',
+}
+
+_FINANCE_ROW_MAP: dict[str, str] = {
+    '매출액': 'revenue',
+    '영업이익': 'operating_profit',
+    '당기순이익': 'net_income',
+    '영업이익률': 'operating_margin',
+    'ROE(지배주주)': 'roe',
+    '부채비율': 'debt_ratio',
+}
+
+
+def parse_fundamentals(integration: Any, annual: Any = None, market: str = 'KR') -> dict[str, Any]:
+    """네이버 증권 종목 통합/연간 재무 응답에서 핵심 재무·밸류에이션 지표를 추출한다."""
+    if not isinstance(integration, dict):
+        return {}
+    out: dict[str, Any] = {}
+    info_key = 'stockItemTotalInfos' if str(market).upper() == 'US' else 'totalInfos'
+    for item in integration.get(info_key) or []:
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get('code') or '')
+        dest = _FUNDAMENTAL_CODE_MAP.get(code)
+        val = str(item.get('value') or '').strip()
+        if dest and val and val not in ('N/A', '-', 'nan'):
+            out[dest] = val
+
+    consensus = integration.get('consensusInfo')
+    if isinstance(consensus, dict):
+        rating = str(consensus.get('recommMean') or '').strip()
+        target = str(consensus.get('priceTargetMean') or '').strip()
+        if rating and rating not in ('0', '0.00', 'N/A'):
+            out['consensus_rating'] = rating
+        if target and target not in ('0', 'N/A'):
+            out['target_price'] = target
+
+    if isinstance(annual, dict):
+        finfo = annual.get('financeInfo') or {}
+        tr_list = finfo.get('trTitleList') or []
+        period_titles = [
+            str(t.get('title') or '').strip()
+            for t in tr_list if isinstance(t, dict) and t.get('title')
+        ]
+        for row in finfo.get('rowList') or []:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get('title') or '').strip()
+            dest = _FINANCE_ROW_MAP.get(title)
+            if not dest:
+                continue
+            cols = row.get('columns') or {}
+            vals = [
+                str(v.get('value')).strip()
+                for v in cols.values()
+                if isinstance(v, dict) and str(v.get('value') or '').strip() not in ('', '-', 'N/A', 'None')
+            ]
+            if vals:
+                out[dest] = vals[-1] if len(vals) == 1 else f'{vals[-2]} -> {vals[-1]}'
+        if period_titles:
+            out['annual_periods'] = ', '.join(period_titles[-3:])
+        corp = _clean(annual.get('corporationSummary'), 240)
+        if corp:
+            out['business_summary'] = corp
+
+    if out:
+        out['source'] = 'naver_finance'
+    return out
+
+
+def _us_reuters_code(symbol: str, exchange: str = 'NASDAQ') -> str:
+    sym = str(symbol or '').strip().upper()
+    if '.' in sym:
+        return sym
+    ex = str(exchange or 'NASDAQ').upper()
+    suffix = '.N' if ex == 'NYSE' else '.A' if ex == 'AMEX' else '.O'
+    return f'{sym}{suffix}'
+
+
+def stock_fundamentals(symbol: str, market: str = 'KR', exchange: str = 'KRX',
+                       ttl: float = 3600.0, force: bool = False) -> dict[str, Any]:
+    """국내·미국 종목의 재무·밸류에이션 요약(PER·PBR·ROE·EPS·시총·매출·영업이익·컨센서스)을 조회한다."""
+    if not force and (stock_news is not _ORIG_STOCK_NEWS or search_news is not _ORIG_SEARCH_NEWS):
+        return {}
+    mkt = 'US' if str(market).upper() == 'US' else 'KR'
+
+    def produce() -> dict[str, Any]:
+        if mkt == 'US':
+            candidates = [_us_reuters_code(symbol, exchange)]
+            for sfx in ('.O', '.N', '.A'):
+                alt = f'{str(symbol).strip().upper()}{sfx}'
+                if alt not in candidates:
+                    candidates.append(alt)
+            for code in candidates:
+                try:
+                    raw = _fetch(NAVER_US_BASIC.format(code=urllib.parse.quote(code)), DESKTOP_AGENT, timeout=3.5)
+                    data = json.loads(raw.decode('utf-8', 'replace'))
+                    parsed = parse_fundamentals(data, None, market='US')
+                    if parsed:
+                        return parsed
+                except Exception:  # noqa: BLE001
+                    continue
+            return {}
+        try:
+            integ_raw = _fetch(NAVER_INTEGRATION.format(code=symbol), MOBILE_AGENT, timeout=3.5)
+            integ = json.loads(integ_raw.decode('utf-8', 'replace'))
+        except Exception as exc:  # noqa: BLE001
+            log.debug('종목 통합정보 실패 %s: %s', symbol, exc)
+            return {}
+        annual = None
+        try:
+            ann_raw = _fetch(NAVER_FINANCE_ANNUAL.format(code=symbol), MOBILE_AGENT, timeout=3.5)
+            annual = json.loads(ann_raw.decode('utf-8', 'replace'))
+        except Exception:  # noqa: BLE001
+            annual = None
+        return parse_fundamentals(integ, annual, market='KR')
+
+    return _cached(f'fund:{mkt}:{symbol}:{exchange}', ttl, produce)
+
+
+_ORIG_STOCK_NEWS = stock_news
+_ORIG_SEARCH_NEWS = search_news

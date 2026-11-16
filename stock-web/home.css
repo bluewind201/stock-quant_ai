@@ -1,4 +1,4 @@
-/* 글로벌 퀀트 홈 · 마켓 펄스 · 단중장기 스튜디오 · 뉴스 센터 · 연결 설정 (Luminous Light v3.25.0) */
+/* 글로벌 퀀트 홈 · 마켓 펄스 · 단중장기 스튜디오 · 뉴스 센터 · 연결 설정 (Luminous Light v3.26.0) */
 .global-pulse{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px 18px;padding:11px 18px;margin-bottom:16px;border-radius:14px;background:linear-gradient(95deg,#ffffff,#f0fdfa);border:1px solid #cbd5e1;box-shadow:0 6px 20px rgba(15,23,42,.05)}
 .global-pulse:empty{display:none}
 .gp-sessions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}

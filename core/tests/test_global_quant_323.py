@@ -327,3 +327,114 @@ def test_office_normalization_fallback_and_scan_giveup_clearing(tmp_path, monkey
     service.tick(state['id'])
     after_roll = service.store.get(service.account_kind, state['id'])
     assert after_roll['day'] == '2026-10-21' and 'scan_giveup' not in after_roll['errors']
+
+
+def test_v326_fundamentals_parallel_office_and_horizon_alignment(monkeypatch):
+    from sqt import ai_office, krnews
+    from sqt.paper_models import PortfolioPlan
+
+    # 1) KR & US Naver fundamental parsing
+    kr_integ = {
+        'totalInfos': [
+            {'code': 'marketValue', 'value': '450조원'},
+            {'code': 'per', 'value': '11.2배'},
+            {'code': 'pbr', 'value': '1.3배'},
+            {'code': 'eps', 'value': '6,200원'},
+        ],
+        'consensusInfo': {'recommMean': '4.00', 'priceTargetMean': '92,000'},
+    }
+    kr_annual = {
+        'financeInfo': {
+            'trTitleList': [{'title': '2024.12'}, {'title': '2025.12'}],
+            'rowList': [
+                {'title': '매출액', 'columns': {'0': {'value': '250조'}, '1': {'value': '300조'}}},
+                {'title': '영업이익', 'columns': {'0': {'value': '20조'}, '1': {'value': '35조'}}},
+                {'title': 'ROE(지배주주)', 'columns': {'0': {'value': '8.1'}, '1': {'value': '12.4'}}},
+            ],
+        },
+        'corporationSummary': '반도체·모바일 글로벌 기업',
+    }
+    kr_fund = krnews.parse_fundamentals(kr_integ, kr_annual, market='KR')
+    assert kr_fund['per'] == '11.2배' and kr_fund['target_price'] == '92,000'
+    assert '300조' in kr_fund['revenue'] and '12.4' in kr_fund['roe']
+
+    us_basic = {
+        'stockItemTotalInfos': [
+            {'code': 'marketValue', 'value': '3조 8,000억 USD'},
+            {'code': 'per', 'value': '20.1배'},
+            {'code': 'industryGroupKor', 'value': '반도체'},
+        ]
+    }
+    us_fund = krnews.parse_fundamentals(us_basic, None, market='US')
+    assert us_fund['per'] == '20.1배' and us_fund['sector'] == '반도체'
+
+    # 2) Parallel 4-analyst dispatch after collect, technical fallback recovery, and horizon alignment
+    monkeypatch.setattr(ai_office.krnews, 'stock_news', lambda *a, **k: [])
+    monkeypatch.setattr(ai_office.krnews, 'search_news', lambda *a, **k: [])
+
+    events = []
+    running_at_analyst_call = []
+
+    class ParallelRecoveryAI:
+        def __init__(self):
+            self.last_usage = {}
+            self._usage_local = threading.local()
+            self.seen_labels = []
+            self.lock_obj = threading.Lock()
+
+        def _run(self, contract, prompt, timeout=150, label=''):
+            with self.lock_obj:
+                self.seen_labels.append(label)
+                if label in ('차트 분석가', '수급·심리 분석가', '뉴스·거시 분석가', '기업·공시 분석가'):
+                    cur_running = {r for r, st, _ in events if st == 'running'}
+                    running_at_analyst_call.append(cur_running)
+            if label == '차트 분석가':
+                raise ValueError('simulated chart parse failure')
+            if contract == ai_office.RiskReview:
+                return {'summary': '분산 진입 승인', 'approved_buys': ['005930 (삼성전자)'], 'approved_exits': [], 'reasons': []}
+            return {
+                'summary': f'{label} 정상 분석 완료',
+                'findings': [{'symbol': '005930 (삼성전자)', 'positive': '재무 및 수급 양호', 'negative': '단기 등락', 'evidence_ids': ['chart:005930']}],
+            }
+
+        def _judge(self, contract, prompt, snapshot, timeout=240, label='', _lock_held=False):
+            return {
+                'summary': '단기 추세 편입',
+                'picks': [{
+                    'symbol': '005930 (삼성전자)',
+                    'horizon': 'short',  # Deliberately mismatched vs assigned 'long' -> aligned inside ai_office
+                    'max_entry_price': 60000,
+                    'take_profit_pct': 15,
+                    'stop_loss_pct': 5,
+                    'weight_pct': 15,
+                    'thesis': '밸류에이션 매력과 장기 추세 상승 동시 확보',
+                    'counter_case': '글로벌 반도체 경기 둔화 위험',
+                    'invalidation': '장기 200일선 이탈 시 전량 정리',
+                }],
+            }
+
+    snap = {
+        'at': NOW.isoformat(),
+        'day': '2026-10-21',
+        'held': [],
+        'portfolio_policy': {'caps': {'short': 20, 'medium': 30, 'long': 30}},
+        'candidates': [{
+            'symbol': '005930',
+            'name': '삼성전자',
+            'eligible_horizons': ['long'],
+            'assigned_horizon': 'long',
+            'last_price': 60000,
+            'fundamentals': kr_fund,
+            'portfolio': {'price': 60000, 'rsi14': 54.0, 'ret20d_pct': 6.2, 'atr14_pct': 2.1},
+            'news': [],
+        }],
+    }
+    plan = ai_office.run(ParallelRecoveryAI(), snap, lambda *ev: events.append(ev))
+    # All 4 analysts entered 'running' together before completing
+    assert any({'technical', 'flow', 'news', 'company'} <= s for s in running_at_analyst_call)
+    # Technical recovered via quant fallback instead of aborting meeting
+    done_stages = {r: out for r, st, out in events if st == 'done'}
+    assert 'technical' in done_stages and done_stages['technical']['usage']['provider'] == 'quant-fallback'
+    assert plan['picks'][0]['symbol'] == '005930'
+    assert plan['picks'][0]['horizon'] == 'long'
+    assert plan['picks'][0]['max_entry_price'] >= 61200  # Bumped to avoid tight open gap block

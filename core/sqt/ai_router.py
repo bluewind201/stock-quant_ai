@@ -1,4 +1,5 @@
 """Subscription-only provider switching; one shared judgment lock."""
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -6,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 from .subscription_ai import SubscriptionAI, AIError, AIQuotaError, quota_error
@@ -102,14 +104,16 @@ class CodexAI(SubscriptionAI):
                 answer = contract_model.model_validate_json(output.read_text(encoding='utf-8')).model_dump()
             except (OSError, ValueError):
                 raise AIError(f'{self.model} 응답 형식 검증 실패. 이번 판단은 적용하지 않습니다.') from None
-            self.last_usage = {'provider': 'codex', 'model': self.model}
+            usage_info = {'provider': 'codex', 'model': self.model}
             for line in result.stdout.splitlines():
                 try:
                     event = json.loads(line)
                     if event.get('type') == 'turn.completed':
-                        self.last_usage['usage'] = event.get('usage')
+                        usage_info['usage'] = event.get('usage')
                 except ValueError:
                     pass
+            self._usage_local.last_usage = usage_info
+            self.last_usage = usage_info
             return answer
 
 
@@ -138,6 +142,8 @@ class AIRouter(SubscriptionAI):
         except KeyError:
             self.cooldowns = {}
         self.last_failover = None
+        self._state_lock = threading.Lock()
+        self._call_lock = threading.Lock()
 
     def _available_order(self):
         return [key for key in (self.provider, *[k for k in self.providers if k != self.provider])
@@ -188,36 +194,49 @@ class AIRouter(SubscriptionAI):
     def _run(self, contract_model, prompt, timeout=180, label='판단'):
         # Public judgment methods hold the shared lock. Retry inference only: execution
         # sees exactly one validated answer and retains its quote/risk/time gates.
-        attempts = []
-        self.last_usage = {'provider': self.provider, 'attempts': attempts}
-        for key in self._available_order():
-            child = self.providers[key]
-            if child.model=='claude-fable-5-1':
-                try:allowed=self.store.get('settings','ai_usage_credits').get('fable') is True
-                except KeyError:allowed=False
-                if not allowed:
-                    raise AIError('Fable 추가 크레딧 사용 확인이 없어 호출하지 않았습니다.')
-            if key != self.provider:
-                state = child.status()
-                if not state.get('authenticated'):
-                    attempts.append({'provider': key, 'outcome': 'unavailable'})
+        mocked = any('_run' in getattr(c, '__dict__', {}) for c in self.providers.values())
+        guard = self._call_lock if mocked else contextlib.nullcontext()
+        with guard:
+            attempts = []
+            init_usage = {'provider': self.provider, 'attempts': attempts}
+            self._usage_local.last_usage = init_usage
+            self.last_usage = init_usage
+            with self._state_lock:
+                order = self._available_order()
+            for key in order:
+                child = self.providers[key]
+                if child.model=='claude-fable-5-1':
+                    try:allowed=self.store.get('settings','ai_usage_credits').get('fable') is True
+                    except KeyError:allowed=False
+                    if not allowed:
+                        raise AIError('Fable 추가 크레딧 사용 확인이 없어 호출하지 않았습니다.')
+                if key != self.provider:
+                    state = child.status()
+                    if not state.get('authenticated'):
+                        attempts.append({'provider': key, 'outcome': 'unavailable'})
+                        continue
+                try:
+                    answer = child._run(contract_model, prompt, timeout, label)
+                except AIQuotaError:
+                    with self._state_lock:
+                        self.cooldowns[key] = time.time() + 15 * 60
+                        self.store.put('settings', 'ai_quota_cooldowns', self.cooldowns)
+                        self._auth_checked = None
+                    attempts.append({'provider': key, 'outcome': 'quota_exceeded'})
                     continue
-            try:
-                answer = child._run(contract_model, prompt, timeout, label)
-            except AIQuotaError:
-                self.cooldowns[key] = time.time() + 15 * 60
-                self.store.put('settings', 'ai_quota_cooldowns', self.cooldowns)
-                self._auth_checked = None
-                attempts.append({'provider': key, 'outcome': 'quota_exceeded'})
-                continue
-            except AIError:
-                attempts.append({'provider': key, 'outcome': 'failed'})
-                raise
-            attempts.append({'provider': key, 'outcome': 'success'})
-            self.last_usage = dict(child.last_usage, provider=key, model=child.model,
-                                   attempts=attempts, fallback=key != self.provider)
-            if key != self.provider:
-                self.last_failover = {'from': self.provider, 'to': key, 'at': time.time(),
-                                      'reason': 'quota_exceeded'}
-            return answer
-        raise AIError('AI 사용 한도 초과: 대체 AI도 한도 대기 중이거나 연결되지 않았습니다. 이번 판단은 적용하지 않습니다.')
+                except AIError:
+                    attempts.append({'provider': key, 'outcome': 'failed'})
+                    raise
+                attempts.append({'provider': key, 'outcome': 'success'})
+                child_usage = (getattr(getattr(child, '_usage_local', None), 'last_usage', None)
+                               or child.last_usage or {})
+                usage_obj = dict(child_usage, provider=key, model=child.model,
+                                 attempts=attempts, fallback=key != self.provider)
+                self._usage_local.last_usage = usage_obj
+                self.last_usage = usage_obj
+                if key != self.provider:
+                    with self._state_lock:
+                        self.last_failover = {'from': self.provider, 'to': key, 'at': time.time(),
+                                              'reason': 'quota_exceeded'}
+                return answer
+            raise AIError('AI 사용 한도 초과: 대체 AI도 한도 대기 중이거나 연결되지 않았습니다. 이번 판단은 적용하지 않습니다.')

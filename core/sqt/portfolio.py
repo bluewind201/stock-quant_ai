@@ -664,7 +664,6 @@ def scan(service, state, now):
 
     state['portfolio_checks'] = checks
     state['portfolio_universes'] = universe
-    state['portfolio_held_data'] = {r['symbol']: r.get('portfolio', {}) for r in rows if r['symbol'] in state['positions']}
     active_candidates = [r for r in approved if r.get('eligible_horizons')]
     # Preserve `approved` list compatibility when tests inspect `result['candidates']`
     # Note: candidates with non-empty eligible_horizons come first, sorted by best rank_score
@@ -672,6 +671,19 @@ def scan(service, state, now):
         1 if r.get('eligible_horizons') else 0,
         max((r['portfolio']['signals'][h]['rank_score'] for h in r.get('eligible_horizons', [])), default=-999),
     ), reverse=True)
+    fund_targets = active_candidates[:20] if active_candidates else approved[:12]
+    held_rows = [r for r in rows if r['symbol'] in state['positions'] and r not in fund_targets]
+    def _attach_fund(r):
+        us = is_us_symbol(r['symbol'])
+        try:
+            r['fundamentals'] = scanner.krnews.stock_fundamentals(
+                r['symbol'], market='US' if us else 'KR',
+                exchange=r.get('exchange', 'NASDAQ' if us else 'KRX'))
+        except Exception:  # noqa: BLE001
+            r['fundamentals'] = {}
+    with ThreadPoolExecutor(max_workers=4) as fund_exec:
+        list(fund_exec.map(_attach_fund, fund_targets + held_rows))
+    state['portfolio_held_data'] = {r['symbol']: r.get('portfolio', {}) for r in rows if r['symbol'] in state['positions']}
     return {
         'scanned_at': now.isoformat(), 'pool_size': len(symbols), 'enriched': len(rows),
         'markets': markets, 'usd_krw': usd_krw,
@@ -934,7 +946,9 @@ def tick(service, state, now):
 
         if '09:00' <= hh < '15:30' and service._tradable(state, now):
             monitor(service, state, now, market_filter='KR' if 'US' in markets else None)
-            if '09:05' <= hh < '15:10' and state['phase'] in ('planned', 'entering'):
+            has_kr_picks = any(not is_us_symbol(p['symbol']) and not p.get('_done')
+                               for p in (state.get('plan') or {}).get('picks', []))
+            if '09:05' <= hh < '15:10' and (has_kr_picks or state['phase'] in ('planned', 'entering')):
                 service._do_entry(state, now, market_filter='KR' if 'US' in markets else None)
 
         if hh >= '15:10' and service.is_live(state):

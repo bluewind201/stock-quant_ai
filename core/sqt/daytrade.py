@@ -1225,7 +1225,7 @@ class DayTradeService:
                 'exit_evidence':portfolio.exit_evidence(state),
                 'horizons':portfolio.LABELS,'cash_floor_pct':max(10,100-sum(caps.values())),'risk_per_trade_pct':cfg['portfolio_risk_pct'],
                 'held':list(state['positions'].values()),'held_daily':{s:{k:v for k,v in f.items() if k!='chart'} for s,f in state.get('portfolio_held_data',{}).items()},
-                'no_day_end_liquidation':True,'fundamentals':'미수집: 밸류·재무 건전성 판단 근거로 사용할 수 없음'}
+                'no_day_end_liquidation':True,'fundamentals':'수집됨: 후보별 fundamentals(PER·PBR·ROE·EPS·시가총액·매출·영업이익·부채비율·컨센서스)와 가격·추세·수급 지표를 결합해 판단할 것 (일부 세부 재무 항목 누락 시 가용 지표로 대체 판단하며 재무제표 부재를 이유로 매수·보유 판단을 보류하지 말 것)'}
         # "AI 가 무엇을 보고 판단했나" 를 화면에 보여주기 위해 남긴다. 후보별 기사는 scan 안에 있다.
         state['ai_inputs'] = {
             'at': now.isoformat(), 'kind': '장전 판단',
@@ -1260,7 +1260,16 @@ class DayTradeService:
 
     @staticmethod
     def _candidate_view(c: dict) -> dict:
+        eligible = c.get('eligible_horizons', [])
         daily={k:v for k,v in (c.get('portfolio') or {}).items() if k!='chart'}
+        if daily and isinstance(daily.get('signals'), dict) and eligible:
+            sig_copy = {}
+            for k, v in daily['signals'].items():
+                if k in eligible or not isinstance(v, dict):
+                    sig_copy[k] = v
+                else:
+                    sig_copy[k] = {**v, 'eligible': False, 'reason': f'배정 기간({portfolio.LABELS.get(eligible[0], eligible[0])}) 우선 선택'}
+            daily = {**daily, 'signals': sig_copy}
         technical=c.get('technical')
         if c.get('portfolio') and technical:technical=dict(technical,daily=daily)
         return {
@@ -1273,9 +1282,11 @@ class DayTradeService:
             'last_price': c.get('last_price'), 'trading_amount_krw': c.get('trading_amount'),
             'flow_foreigner_1d': c.get('flow_foreigner_1d'), 'flow_institution_1d': c.get('flow_institution_1d'),
             'flow_foreigner_3d': c.get('flow_foreigner_3d'), 'flow_institution_3d': c.get('flow_institution_3d'),
+            'fundamentals': c.get('fundamentals') or {},
             'themes': c.get('themes', []),
             'technical': technical,
-            'portfolio': daily or None, 'eligible_horizons':c.get('eligible_horizons',[]),
+            'portfolio': daily or None, 'eligible_horizons':eligible,
+            'assigned_horizon': eligible[0] if eligible else None,
             'data_notes':c.get('data_notes',[]),
             'in_play': c.get('in_play'),
             'news': [{'title': n['title'], 'body': n.get('body','')[:400], 'source': n.get('source',''),
