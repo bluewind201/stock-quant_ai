@@ -5,8 +5,8 @@
 const SQCharts=(()=>{
   const reduce=()=>window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
   const css=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  const palette=()=>({up:css('--up')||'#fb8190',down:css('--down')||'#76adff',accent:css('--accent')||'#56e2c1',
-    text:css('--text')||'#e2ebf8',muted:css('--muted')||'#9aabc3',line:css('--line')||'#253248',panel:css('--panel')||'#111a29'});
+  const palette=()=>({up:css('--up')||'#e11d48',down:css('--down')||'#2563eb',accent:css('--accent')||'#0d9488',
+    text:css('--text')||'#0f172a',muted:css('--muted')||'#475569',line:css('--line')||'#e2e8f0',panel:css('--panel')||'#ffffff'});
   const registry=new Map();let tip=null,resizeTimer=null;
   function tooltip(){if(!tip){tip=document.createElement('div');tip.className='sq-tip';tip.setAttribute('role','status');tip.hidden=true;document.body.append(tip);}return tip;}
   function showTip(html,x,y){const t=tooltip();t.innerHTML=html;t.hidden=false;const r=t.getBoundingClientRect();

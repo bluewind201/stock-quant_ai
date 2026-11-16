@@ -1,4 +1,4 @@
-/* Neural Terminal Sidebar & Workspace Controls (v3.24.0) */
+/* Luminous Terminal Sidebar & Workspace Controls (v3.25.0) */
 nav.terminal-sidebar {
   position: fixed;
   top: 68px;
@@ -9,10 +9,10 @@ nav.terminal-sidebar {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  background: rgba(8, 13, 24, 0.94);
+  background: rgba(255, 255, 255, 0.92);
   border-right: 1px solid var(--line-glass);
   border-bottom: 0;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(18px);
   z-index: 50;
   overflow-y: auto;
   overflow-x: hidden;
@@ -21,7 +21,7 @@ nav.terminal-sidebar {
 .sidebar-label {
   font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 1.4px;
+  letter-spacing: 0.5px;
   color: var(--faint);
   padding: 4px 10px 6px;
 }
@@ -38,21 +38,22 @@ nav.terminal-sidebar button[data-tab] {
   background: transparent;
   color: var(--muted);
   text-align: left;
+  box-shadow: none;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.15s ease;
 }
 
 nav.terminal-sidebar button[data-tab]:hover {
-  background: rgba(24, 39, 64, 0.72);
-  border-color: rgba(148, 163, 184, 0.18);
+  background: #f1f5f9;
+  border-color: #cbd5e1;
   color: var(--text);
   box-shadow: none;
 }
 
 nav.terminal-sidebar button[data-tab].active {
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.16), rgba(167, 139, 250, 0.10));
-  border-color: rgba(45, 212, 191, 0.40);
-  color: #f4f9ff;
-  box-shadow: 0 4px 18px rgba(45, 212, 191, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.12), rgba(124, 58, 237, 0.08));
+  border-color: rgba(13, 148, 136, 0.38);
+  color: #0f172a;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 nav.terminal-sidebar button[data-tab].active::before {
@@ -64,7 +65,7 @@ nav.terminal-sidebar button[data-tab].active::before {
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
+  box-shadow: 0 0 8px rgba(13, 148, 136, 0.45);
 }
 
 nav.terminal-sidebar .nav-ico {
@@ -74,7 +75,7 @@ nav.terminal-sidebar .nav-ico {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: rgba(16, 28, 48, 0.85);
+  background: #f1f5f9;
   border: 1px solid var(--line);
   color: var(--muted);
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
@@ -83,11 +84,12 @@ nav.terminal-sidebar .nav-ico {
 nav.terminal-sidebar button[data-tab]:hover .nav-ico {
   color: var(--text);
   border-color: var(--line-strong);
+  background: #ffffff;
 }
 
 nav.terminal-sidebar button[data-tab].active .nav-ico {
-  background: rgba(45, 212, 191, 0.18);
-  border-color: rgba(45, 212, 191, 0.45);
+  background: rgba(13, 148, 136, 0.14);
+  border-color: rgba(13, 148, 136, 0.42);
   color: var(--accent);
 }
 
@@ -118,18 +120,18 @@ nav.terminal-sidebar .nav-sub {
 }
 
 nav.terminal-sidebar button[data-tab].active .nav-sub {
-  color: #99f6e4;
-  opacity: 0.88;
+  color: #0f766e;
+  opacity: 0.92;
 }
 
 .sidebar-bottom {
   margin-top: auto;
   padding: 13px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(45, 212, 191, 0.22);
+  border: 1px solid rgba(13, 148, 136, 0.24);
   background:
-    radial-gradient(ellipse 80% 70% at 90% 0%, rgba(167, 139, 250, 0.12), transparent 65%),
-    rgba(13, 22, 39, 0.88);
+    radial-gradient(ellipse 80% 70% at 90% 0%, rgba(124, 58, 237, 0.08), transparent 65%),
+    linear-gradient(145deg, #f0fdfa, #f8fafc);
   box-shadow: var(--glass-highlight);
   display: grid;
   gap: 6px;
@@ -141,7 +143,7 @@ nav.terminal-sidebar button[data-tab].active .nav-sub {
   gap: 7px;
   font-size: 12px;
   font-weight: 700;
-  color: #edf3fc;
+  color: #0f172a;
 }
 
 .sidebar-bottom small {
@@ -153,16 +155,17 @@ nav.terminal-sidebar button[data-tab].active .nav-sub {
 .sidebar-bottom button {
   width: 100%;
   margin-top: 4px;
-  border: 1px solid var(--line);
-  background: rgba(17, 30, 52, 0.72);
-  color: #cfe0f5;
+  border: 1px solid var(--line-strong);
+  background: #ffffff;
+  color: #0f172a;
   font-size: 11.5px;
   padding: 6px 10px;
 }
 
 .sidebar-bottom button:hover {
   border-color: var(--accent);
-  color: #fff;
+  color: #0f766e;
+  background: #f0fdfa;
 }
 
 main {
@@ -187,8 +190,8 @@ footer {
   margin-bottom: 16px;
   border-radius: 12px;
   border: 1px solid var(--line-glass);
-  background: linear-gradient(135deg, rgba(14, 24, 42, 0.88), rgba(10, 17, 30, 0.94));
-  box-shadow: var(--glass-highlight);
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  box-shadow: var(--glass-highlight), var(--shadow);
 }
 
 .terminal-connections .connection-heading {
@@ -221,8 +224,8 @@ footer {
   font-weight: 600;
   white-space: nowrap;
   border: 1px solid var(--line-strong);
-  background: rgba(16, 28, 48, 0.88);
-  color: #cfe0f5;
+  background: #f8fafc;
+  color: #334155;
 }
 
 .auth-chip i {
@@ -244,15 +247,15 @@ footer {
   font-size: 10.5px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(45, 212, 191, 0.16);
-  color: var(--accent);
-  border: 1px solid rgba(45, 212, 191, 0.34);
+  background: rgba(13, 148, 136, 0.14);
+  color: #0f766e;
+  border: 1px solid rgba(13, 148, 136, 0.34);
 }
 
-.auth-chip.ok, .auth-chip.connected { border-color: rgba(52, 211, 153, 0.42); background: var(--ok-bg); color: #86efac; }
-.auth-chip.warn { border-color: rgba(251, 191, 36, 0.42); background: var(--warn-bg); color: #fde68a; }
-.auth-chip.bad, .auth-chip.disconnected { border-color: rgba(255, 92, 119, 0.45); background: var(--up-bg); color: #fda4af; }
-.auth-chip.pending { border-color: var(--line); color: var(--muted); }
+.auth-chip.ok, .auth-chip.connected { border-color: #6ee7b7; background: #ecfdf5; color: #065f46; }
+.auth-chip.warn { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+.auth-chip.bad, .auth-chip.disconnected { border-color: #fda4af; background: #fff1f2; color: #9f1239; }
+.auth-chip.pending { border-color: var(--line-strong); color: var(--muted); }
 
 /* ── 상세 분석 · 투자 운용 필터 바 ──────────────────────────── */
 .terminal-switch,
@@ -265,8 +268,8 @@ footer {
   margin-bottom: 16px;
   border-radius: 12px;
   border: 1px solid var(--line-glass);
-  background: rgba(11, 19, 34, 0.88);
-  box-shadow: var(--glass-highlight);
+  background: #ffffff;
+  box-shadow: var(--shadow);
 }
 
 .terminal-switch button,
@@ -278,20 +281,21 @@ footer {
   font-size: 12.5px;
   font-weight: 600;
   border-radius: 9px;
+  box-shadow: none;
 }
 
 .terminal-switch button:hover,
 .dt-switch button:hover {
-  background: rgba(26, 42, 68, 0.72);
+  background: #f1f5f9;
   color: var(--text);
   box-shadow: none;
 }
 
 .terminal-switch button.active,
 .dt-switch button.active {
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.18), rgba(167, 139, 250, 0.12));
-  border-color: rgba(45, 212, 191, 0.45);
-  color: #f4f9ff;
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.14), rgba(124, 58, 237, 0.08));
+  border-color: rgba(13, 148, 136, 0.38);
+  color: #0f766e;
 }
 
 .dt-zone-hidden {
@@ -299,7 +303,7 @@ footer {
 }
 
 .terminal-command {
-  border-color: rgba(45, 212, 191, 0.28);
+  border-color: rgba(13, 148, 136, 0.30);
 }
 
 .terminal-research-heading {
@@ -307,7 +311,7 @@ footer {
   padding: 12px 16px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(14, 24, 42, 0.82);
+  background: #ffffff;
 }
 
 @media (max-width: 1150px) {
@@ -337,8 +341,9 @@ footer {
     gap: 2px;
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
     border-right: 0;
-    border-top: 1px solid var(--line-glass);
-    background: rgba(8, 13, 24, 0.97);
+    border-top: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
     z-index: 60;
     overflow: hidden;
   }

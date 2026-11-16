@@ -336,6 +336,11 @@ class DayTradeService:
                 state['plan'] = None
                 state['_force_scan'] = utcnow().isoformat()
                 state['retry'] = {'attempts': 0, 'last': None}
+                state['errors'].pop('scan_giveup', None)
+                state['errors'].pop('scan', None)
+                state['ai']['error'] = ''
+                if hasattr(self.ai, 'cooldowns') and isinstance(self.ai.cooldowns, dict):
+                    self.ai.cooldowns.clear()
                 self._log(state, '즉시 스캔·판단 요청 (수동)')
             elif action == 'review_now':
                 # tick 에 맡기면 휴장일·정지 상태에서 영영 실행되지 않는다. 여기서 바로 띄운다.
@@ -804,10 +809,26 @@ class DayTradeService:
         def run():
             started=time.monotonic()
             result, error = None, ''
+            office_fallback = False
             try:
                 result = self.ai.plan_office(snapshot,office_progress) if office_enabled else fn(snapshot)
             except AIError as exc:
                 error = str(exc)
+                if office_enabled and 'AI 오피스 중단' not in error:
+                    with self.lock:
+                        latest_chk = self.store.get(self.account_kind, account_id)
+                        should_fb = (latest_chk['status'] == 'running'
+                                     and snapshot.get('day', _day(utcnow())) == _day(utcnow()))
+                    if should_fb:
+                        try:
+                            fallback = fn(snapshot)
+                            if isinstance(fallback, dict) and fallback:
+                                result, error, office_fallback = fallback, '', True
+                                log.warning('AI 오피스 실패 후 단일 장전 판단으로 자동 전환 완료: %s', exc)
+                        except AIError as fb_exc:
+                            error = f'{exc} · 단일 전환 실패: {fb_exc}'
+                        except Exception as fb_exc:  # noqa: BLE001
+                            error = f'{exc} · 단일 전환 오류 ({type(fb_exc).__name__})'
             except Exception as exc:  # noqa: BLE001
                 error = f'{kind} 처리 오류 ({type(exc).__name__})'
                 log.error('%s failed: %s',kind,type(exc).__name__)
@@ -816,14 +837,15 @@ class DayTradeService:
                 latest['ai']['pending'] = False
                 latest['ai']['error'] = error
                 elapsed=time.monotonic()-started
-                learning.result(self.store,decision_id,result,error,self.ai.last_usage,elapsed,utcnow())
+                usage_meta = getattr(self.ai, 'last_usage', None) or {}
+                learning.result(self.store,decision_id,result,error,usage_meta,elapsed,utcnow())
                 latest['ai']['history'].append({'at': utcnow().isoformat(), 'kind': kind,
                                                 'ok': not error, 'error': error,
                                                 'summary': (result or {}).get('summary', '')[:400],
-                                                'cost_usd': self.ai.last_usage.get('cost_usd')})
-                latest['ai']['history'][-1]['provider'] = self.ai.last_usage.get('provider', 'claude')
-                latest['ai']['history'][-1]['model'] = self.ai.last_usage.get('model')
-                latest['ai']['history'][-1]['office_calls'] = self.ai.last_usage.get('office_calls',0) if office_enabled else 0
+                                                'cost_usd': usage_meta.get('cost_usd')})
+                latest['ai']['history'][-1]['provider'] = usage_meta.get('provider', 'claude')
+                latest['ai']['history'][-1]['model'] = usage_meta.get('model')
+                latest['ai']['history'][-1]['office_calls'] = usage_meta.get('office_calls',0) if office_enabled else 0
                 latest['ai']['history'][-1]['seconds']=round(elapsed,2)
                 latest['ai']['history'][-1]['decision_id']=decision_id
                 latest['ai']['history'][-1]['policy_version']=snapshot.get('policy_version') or learning.policy(latest)
@@ -855,8 +877,11 @@ class DayTradeService:
                                      notify.error_message(f'AI {kind} 실패', error + ' · 웹 홈의 운영 점검에서 원인을 확인하세요'))
                 if office_enabled:
                     office=self.store.get('office_runs',decision_id)
-                    office['application']='실패 · 주문에 미적용' if latest['ai']['error'] else '검증 후 계획 반영 · 체결과 별도'
+                    office['application']=('실패 · 주문에 미적용' if latest['ai']['error']
+                                           else '회의실 일부 단계 지연 · 단일 장전 판단 자동 전환 완료' if office_fallback
+                                           else '검증 후 계획 반영 · 체결과 별도')
                     if latest['ai']['error']:office['status']='failed'
+                    elif office_fallback:office['status']='done'
                     self.store.put('office_runs',decision_id,office)
                 self.store.put(self.account_kind, account_id, latest)
 
@@ -921,6 +946,8 @@ class DayTradeService:
                     state['events'] = {'seen_news': [], 'surge_ref': {}, 'surged': [], 'portfolio_reviews': []}
                     state['stamps'] = {}
                     state['retry'] = {'attempts': 0, 'last': None}
+                    state['errors'].pop('scan_giveup', None)
+                    state['errors'].pop('scan', None)
                     state['sessions'] = None
                     for pos in state['positions'].values():
                         pos['hold_overnight'] = cfg.get('strategy')=='portfolio'
@@ -1074,8 +1101,10 @@ class DayTradeService:
                 pass
         if retry['attempts'] >= cfg['max_scan_attempts']:
             if not state['errors'].get('scan_giveup'):
+                last_reason = (state.get('ai', {}).get('error') or state.get('errors', {}).get('scan') or '').strip()
+                reason_suffix = f' ({last_reason[:140]})' if last_reason else ''
                 state['errors']['scan_giveup'] = (
-                    f'장전 스캔·판단을 {retry["attempts"]}번 시도했지만 실패했습니다. '
+                    f'장전 스캔·판단을 {retry["attempts"]}번 시도했지만 실패했습니다{reason_suffix}. '
                     '오늘은 신규 진입하지 않습니다. "지금 스캔·AI 판단"으로 다시 시도할 수 있습니다.')
                 self._log(state, state['errors']['scan_giveup'])
                 notify.post_once(f'scan-giveup:{state["day"]}:{state["id"]}',
@@ -1086,6 +1115,8 @@ class DayTradeService:
     def _try_plan(self, state: dict, now: datetime) -> None:
         """스캔 → (진입 창 안이면) AI 장전 판단. 실패는 다음 주기에 다시."""
         cfg = state['config']
+        if state.get('scan') and state['phase'] not in ('idle', 'holiday') and not self._ai_allowed(state, now, anchor=True):
+            return
         manual = bool(state.pop('_force_scan', False))
         retry = state.setdefault('retry', {'attempts': 0, 'last': None})
         retry['attempts'] += 1
@@ -1104,12 +1135,17 @@ class DayTradeService:
             state['phase'] = 'monitoring'
             return
 
-        late = _minutes_since(now, cfg['entry_at']) > cfg['entry_window_minutes']
+        if cfg.get('strategy') == 'portfolio':
+            us_open_mode = ('US' in (cfg.get('markets') or ['KR']) and portfolio.us_preopen_or_open(now))
+            late = _hhmm(now) >= '15:10' and not us_open_mode
+        else:
+            late = _minutes_since(now, cfg['entry_at']) > cfg['entry_window_minutes']
         if late and not manual:
             state['phase'] = 'monitoring'
             self._log(state, '진입 창이 지나 장전 판단은 생략합니다. 마감 판단에서 다시 봅니다.')
             return
         if not self._ai_allowed(state, now, anchor=True):
+            retry['attempts'] = max(0, retry['attempts'] - 1)
             return          # 다음 주기에 다시 (횟수 한도에는 걸리지 않는다)
         self._plan_call(state, now)
 

@@ -125,49 +125,49 @@ class OfficeScene{
     this.drawParticles();this.drawLabels(v);this.drawStamp();this.drawBanner(v);
   }
   sky(){const h=Number(new Date().toLocaleString('en-US',{timeZone:'Asia/Seoul',hour:'numeric',hour12:false}))%24;
-    if(h>=6&&h<9)return ['#ffb38a','#7fb2e5',false];if(h>=9&&h<17)return ['#8fd0ff','#cfeaff',false];if(h>=17&&h<20)return ['#ff9a6b','#5a4c8f',false];return ['#0b1530','#1d2b55',true];}
+    if(h>=6&&h<9)return ['#fed7aa','#bae6fd',false];if(h>=9&&h<17)return ['#7dd3fc','#e0f2fe',false];if(h>=17&&h<20)return ['#fdba74','#c4b5fd',false];return ['#334155','#64748b',true];}
   drawRoom(v){
     const c=this.ctx,[s1,s2,night]=this.sky();
-    // 벽
-    let g=c.createLinearGradient(0,0,0,126);g.addColorStop(0,'#16213a');g.addColorStop(1,'#1d2a45');c.fillStyle=g;c.fillRect(0,0,W,126);
-    c.fillStyle='#0f1729';c.fillRect(0,122,W,6);
+    // 벽 (밝은 스튜디오 톤)
+    let g=c.createLinearGradient(0,0,0,126);g.addColorStop(0,'#e2ecf7');g.addColorStop(1,'#d5e2f2');c.fillStyle=g;c.fillRect(0,0,W,126);
+    c.fillStyle='#cbd5e1';c.fillRect(0,122,W,6);
     // 창문 두 개 + 도시
     for(const wx of [36,770]){g=c.createLinearGradient(0,18,0,104);g.addColorStop(0,s1);g.addColorStop(1,s2);c.fillStyle=g;c.fillRect(wx,18,194,86);
-      c.fillStyle=night?'#0a1022':'#4a6386';for(let i=0;i<9;i++){const bw=14+(i*7)%13,bh=18+(i*23)%44;c.fillRect(wx+i*22,104-bh,bw,bh);}
-      if(night){for(let i=0;i<14;i++){const tw=.5+.5*Math.sin(this.t*2+i*1.7);c.fillStyle=`rgba(255,226,140,${.35+tw*.5})`;c.fillRect(wx+6+(i*29)%180,70+(i*13)%30,2,2);}}
-      c.strokeStyle='#2b3b5c';c.lineWidth=4;c.strokeRect(wx,18,194,86);c.beginPath();c.moveTo(wx+97,18);c.lineTo(wx+97,104);c.stroke();}
+      c.fillStyle=night?'#1e293b':'#7c98b6';for(let i=0;i<9;i++){const bw=14+(i*7)%13,bh=18+(i*23)%44;c.fillRect(wx+i*22,104-bh,bw,bh);}
+      if(night){for(let i=0;i<14;i++){const tw=.5+.5*Math.sin(this.t*2+i*1.7);c.fillStyle=`rgba(254,240,138,${.4+tw*.5})`;c.fillRect(wx+6+(i*29)%180,70+(i*13)%30,2,2);}}
+      c.strokeStyle='#94a3b8';c.lineWidth=4;c.strokeRect(wx,18,194,86);c.beginPath();c.moveTo(wx+97,18);c.lineTo(wx+97,104);c.stroke();}
     // 전광판
-    c.fillStyle='#09101d';c.beginPath();c.roundRect?c.roundRect(300,14,400,96,10):c.rect(300,14,400,96);c.fill();
-    c.strokeStyle=v.status==='running'?'#2dd4bf':'#2c3e5e';c.lineWidth=2.5;c.stroke();
+    c.fillStyle='#ffffff';c.beginPath();c.roundRect?c.roundRect(300,14,400,96,10):c.rect(300,14,400,96);c.fill();
+    c.strokeStyle=v.status==='running'?'#0d9488':'#cbd5e1';c.lineWidth=2.5;c.stroke();
     // 전광판 하단 뉴럴 파형
-    c.save();c.beginPath();for(let i=0;i<=48;i++){const px=314+i*7.75,amp=v.status==='running'?5:1.8,spd=this.reduce()?0:this.t*3.2;const py=68+Math.sin(i*.42+spd)*amp*Math.sin(i/48*Math.PI);i?c.lineTo(px,py):c.moveTo(px,py);}c.strokeStyle=v.status==='running'?'rgba(45,212,191,.36)':'rgba(167,139,250,.18)';c.lineWidth=1.5;c.stroke();c.restore();
-    c.fillStyle='#2dd4bf';c.font='700 15px "Segoe UI","Malgun Gothic",sans-serif';c.textAlign='center';c.textBaseline='middle';
+    c.save();c.beginPath();for(let i=0;i<=48;i++){const px=314+i*7.75,amp=v.status==='running'?5:1.8,spd=this.reduce()?0:this.t*3.2;const py=68+Math.sin(i*.42+spd)*amp*Math.sin(i/48*Math.PI);i?c.lineTo(px,py):c.moveTo(px,py);}c.strokeStyle=v.status==='running'?'rgba(13,148,136,.42)':'rgba(124,58,237,.22)';c.lineWidth=1.5;c.stroke();c.restore();
+    c.fillStyle='#0d9488';c.font='700 15px "Segoe UI","Malgun Gothic",sans-serif';c.textAlign='center';c.textBaseline='middle';
     c.fillText(v.replay?'지난 회의 다시 보기':'AI 투자팀 회의실',500,32);
-    c.font='12px "Segoe UI","Malgun Gothic",sans-serif';c.fillStyle='#d5e2f2';c.fillText(officeText(this.headline(v),44),500,52);
+    c.font='12px "Segoe UI","Malgun Gothic",sans-serif';c.fillStyle='#334155';c.fillText(officeText(this.headline(v),44),500,52);
     officeOrder.forEach((id,i)=>{const st=v.stages[id]?.status,x=355+i*41.5,y=87;
-      if(st==='running'){c.fillStyle='rgba(251,191,36,.22)';c.beginPath();c.arc(x,y,11.5,0,Math.PI*2);c.fill();}
-      c.fillStyle=st==='done'?'#2dd4bf':st==='running'?'#fbbf24':st==='failed'?'#ff5c77':'#27344d';
-      c.beginPath();c.arc(x,y,st==='running'&&!this.reduce()?7+Math.sin(this.t*6)*1.2:7,0,Math.PI*2);c.fill();c.fillStyle='#09101d';c.font='700 9px "Segoe UI","Malgun Gothic",sans-serif';c.fillText(officeRoles[i].short[0],x,y+.5);
-      if(i<7){c.fillStyle=st==='done'?'rgba(45,212,191,.6)':'#27344d';c.fillRect(x+8,y-1,25,2);}});
+      if(st==='running'){c.fillStyle='rgba(245,158,11,.22)';c.beginPath();c.arc(x,y,11.5,0,Math.PI*2);c.fill();}
+      c.fillStyle=st==='done'?'#0d9488':st==='running'?'#d97706':st==='failed'?'#e11d48':'#cbd5e1';
+      c.beginPath();c.arc(x,y,st==='running'&&!this.reduce()?7+Math.sin(this.t*6)*1.2:7,0,Math.PI*2);c.fill();c.fillStyle=st==='done'||st==='running'||st==='failed'?'#ffffff':'#475569';c.font='700 9px "Segoe UI","Malgun Gothic",sans-serif';c.fillText(officeRoles[i].short[0],x,y+.5);
+      if(i<7){c.fillStyle=st==='done'?'rgba(13,148,136,.55)':'#cbd5e1';c.fillRect(x+8,y-1,25,2);}});
     // 벽시계
     const now=new Date(),kst=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));const cx=740,cy=60;
-    c.fillStyle='#e9eef6';c.beginPath();c.arc(cx-4,cy,15,0,Math.PI*2);c.fill();c.strokeStyle='#2b3b5c';c.lineWidth=2;c.stroke();
-    const hand=(a,l,w)=>{c.strokeStyle='#1a2236';c.lineWidth=w;c.beginPath();c.moveTo(cx-4,cy);c.lineTo(cx-4+Math.sin(a)*l,cy-Math.cos(a)*l);c.stroke();};
+    c.fillStyle='#ffffff';c.beginPath();c.arc(cx-4,cy,15,0,Math.PI*2);c.fill();c.strokeStyle='#94a3b8';c.lineWidth=2;c.stroke();
+    const hand=(a,l,w)=>{c.strokeStyle='#0f172a';c.lineWidth=w;c.beginPath();c.moveTo(cx-4,cy);c.lineTo(cx-4+Math.sin(a)*l,cy-Math.cos(a)*l);c.stroke();};
     hand((kst.getHours()%12+kst.getMinutes()/60)/12*Math.PI*2,8,2.4);hand(kst.getMinutes()/60*Math.PI*2,12,1.6);
-    // 바닥
-    g=c.createLinearGradient(0,128,0,H);g.addColorStop(0,'#172236');g.addColorStop(1,'#0e1524');c.fillStyle=g;c.fillRect(0,128,W,H-128);
-    c.strokeStyle='rgba(148,163,184,.04)';c.lineWidth=1;for(let x=0;x<W;x+=50){c.beginPath();c.moveTo(x,128);c.lineTo(x,H);c.stroke();}for(let y=128;y<H;y+=50){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}
+    // 바닥 (밝은 톤)
+    g=c.createLinearGradient(0,128,0,H);g.addColorStop(0,'#f4f7fc');g.addColorStop(1,'#e6eef8');c.fillStyle=g;c.fillRect(0,128,W,H-128);
+    c.strokeStyle='rgba(15,23,42,.045)';c.lineWidth=1;for(let x=0;x<W;x+=50){c.beginPath();c.moveTo(x,128);c.lineTo(x,H);c.stroke();}for(let y=128;y<H;y+=50){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}
     // 창문 빛
-    if(!night){for(const wx of [36,770]){g=c.createLinearGradient(wx,128,wx+120,420);g.addColorStop(0,'rgba(255,240,200,.10)');g.addColorStop(1,'rgba(255,240,200,0)');c.fillStyle=g;
+    if(!night){for(const wx of [36,770]){g=c.createLinearGradient(wx,128,wx+120,420);g.addColorStop(0,'rgba(255,255,255,.55)');g.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=g;
       c.beginPath();c.moveTo(wx+20,128);c.lineTo(wx+180,128);c.lineTo(wx+260,420);c.lineTo(wx+80,420);c.closePath();c.fill();}}
     // 러그 + 뉴럴 데이터 배선 + 자료 선반
-    c.fillStyle='rgba(45,212,191,.06)';c.beginPath();c.ellipse(TABLE.x,TABLE.y+6,TABLE.rx+76,TABLE.ry+54,0,0,Math.PI*2);c.fill();
-    c.strokeStyle='rgba(45,212,191,.22)';c.setLineDash([6,6]);c.stroke();c.setLineDash([]);
+    c.fillStyle='rgba(13,148,136,.08)';c.beginPath();c.ellipse(TABLE.x,TABLE.y+6,TABLE.rx+76,TABLE.ry+54,0,0,Math.PI*2);c.fill();
+    c.strokeStyle='rgba(13,148,136,.28)';c.setLineDash([6,6]);c.stroke();c.setLineDash([]);
     this.drawNeuralLinks(v);
-    c.fillStyle='#2a3550';c.fillRect(16,140,52,74);c.fillStyle='#3a4a6b';for(let i=0;i<3;i++)c.fillRect(20,146+i*23,44,18);
-    c.fillStyle='#8aa2c6';for(let i=0;i<3;i++)for(let j=0;j<4;j++)c.fillRect(24+j*10,150+i*23,6,10);
+    c.fillStyle='#cbd5e1';c.fillRect(16,140,52,74);c.fillStyle='#e2e8f0';for(let i=0;i<3;i++)c.fillRect(20,146+i*23,44,18);
+    c.fillStyle='#64748b';for(let i=0;i<3;i++)for(let j=0;j<4;j++)c.fillRect(24+j*10,150+i*23,6,10);
     // 화분
-    for(const [px,py] of [[960,168],[960,590],[40,590]]){c.fillStyle='#6b4a34';c.fillRect(px-12,py-16,24,18);c.fillStyle='#3ea371';
+    for(const [px,py] of [[960,168],[960,590],[40,590]]){c.fillStyle='#b47b56';c.fillRect(px-12,py-16,24,18);c.fillStyle='#10b981';
       for(let k=0;k<5;k++){c.beginPath();c.ellipse(px+Math.cos(k*1.3+Math.sin(this.t*.8)*.05)*9,py-28-Math.sin(k*1.9)*8,7,12,k,0,Math.PI*2);c.fill();}}
   }
   drawNeuralLinks(v){
@@ -178,13 +178,13 @@ class OfficeScene{
       const sx=d.x,sy=d.y+6,ex=TABLE.x,ey=TABLE.y;
       const cx=(sx+ex)/2+(d.x<TABLE.x?36:-36),cy=(sy+ey)/2+(d.y<TABLE.y?-18:18);
       c.beginPath();c.moveTo(sx,sy);c.quadraticCurveTo(cx,cy,ex,ey);
-      c.strokeStyle=st==='done'?'rgba(45,212,191,.34)':st==='running'?'rgba(251,191,36,.52)':st==='failed'?'rgba(255,92,119,.32)':'rgba(100,130,170,.14)';
-      c.lineWidth=st==='running'?2.4:st==='done'?1.8:1.1;c.stroke();
+      c.strokeStyle=st==='done'?'rgba(13,148,136,.42)':st==='running'?'rgba(217,119,6,.55)':st==='failed'?'rgba(225,29,72,.38)':'rgba(148,163,184,.36)';
+      c.lineWidth=st==='running'?2.4:st==='done'?1.8:1.2;c.stroke();
       if(!red&&(st==='running'||(st==='done'&&v.status==='running'))){
         const u=((this.t*(st==='running'?0.85:0.42)+(officeOrder.indexOf(role.id)*0.17))%1);
         const mu=1-u;
         const px=mu*mu*sx+2*mu*u*cx+u*u*ex,py=mu*mu*sy+2*mu*u*cy+u*u*ey;
-        c.fillStyle=st==='running'?'#fde68a':role.color;
+        c.fillStyle=st==='running'?'#d97706':'#0d9488';
         c.beginPath();c.arc(px,py,3.3,0,Math.PI*2);c.fill();
       }
     }
@@ -232,20 +232,20 @@ class OfficeScene{
     c.fillStyle='#5b4632';c.beginPath();c.ellipse(TABLE.x,TABLE.y+8,TABLE.rx,TABLE.ry,0,0,Math.PI*2);c.fill();
     const g=c.createLinearGradient(0,TABLE.y-TABLE.ry,0,TABLE.y+TABLE.ry);g.addColorStop(0,'#a07c58');g.addColorStop(1,'#7d5e41');
     c.fillStyle=g;c.beginPath();c.ellipse(TABLE.x,TABLE.y,TABLE.rx,TABLE.ry,0,0,Math.PI*2);c.fill();
-    c.strokeStyle='rgba(255,255,255,.12)';c.lineWidth=2;c.beginPath();c.ellipse(TABLE.x,TABLE.y,TABLE.rx-12,TABLE.ry-8,0,0,Math.PI*2);c.stroke();
+    c.strokeStyle='rgba(255,255,255,.35)';c.lineWidth=2;c.beginPath();c.ellipse(TABLE.x,TABLE.y,TABLE.rx-12,TABLE.ry-8,0,0,Math.PI*2);c.stroke();
     // 테이블 중앙 홀로그램 AI 코어 링
     c.save();const spin=this.reduce()?0:this.t*(v.status==='running'?1.8:0.35);
-    c.strokeStyle=v.status==='running'?'rgba(45,212,191,.55)':'rgba(167,139,250,.32)';c.lineWidth=1.8;
+    c.strokeStyle=v.status==='running'?'rgba(13,148,136,.65)':'rgba(124,58,237,.42)';c.lineWidth=1.8;
     c.beginPath();c.ellipse(TABLE.x,TABLE.y,44,18,0,spin,spin+Math.PI*1.35);c.stroke();
-    c.strokeStyle='rgba(45,212,191,.28)';c.lineWidth=1.2;
+    c.strokeStyle='rgba(13,148,136,.35)';c.lineWidth=1.2;
     c.beginPath();c.ellipse(TABLE.x,TABLE.y,26,10.5,0,-spin*1.4,-spin*1.4+Math.PI*1.2);c.stroke();
-    c.fillStyle=v.status==='running'?'rgba(45,212,191,.35)':'rgba(167,139,250,.22)';c.beginPath();c.arc(TABLE.x,TABLE.y,5,0,Math.PI*2);c.fill();c.restore();
+    c.fillStyle=v.status==='running'?'rgba(13,148,136,.45)':'rgba(124,58,237,.30)';c.beginPath();c.arc(TABLE.x,TABLE.y,5,0,Math.PI*2);c.fill();c.restore();
     // 테이블 위 서류: 완료한 보고서 수만큼
     const done=officeOrder.filter(id=>v.stages[id]?.status==='done').length;
     for(let i=0;i<done;i++){const a=(-90+i*45)*Math.PI/180;const px=TABLE.x+Math.cos(a)*(TABLE.rx-46),py=TABLE.y+Math.sin(a)*(TABLE.ry-22);
-      c.save();c.translate(px,py);c.rotate(a+Math.PI/2);c.fillStyle='#eef3fa';c.fillRect(-9,-7,18,14);c.fillStyle=officeRoles[i].color;c.fillRect(-9,-7,18,3);c.restore();}
-    if(v.status==='done'||(v.replay&&v.status!=='running')){c.fillStyle='#56e2c1';c.font='700 13px "Segoe UI","Malgun Gothic",sans-serif';c.textAlign='center';c.fillText('회의 결론',TABLE.x,TABLE.y-26);
-      const out=v.stages.office?.output||{};c.fillStyle='#f4f7fb';c.font='12px "Segoe UI","Malgun Gothic",sans-serif';
+      c.save();c.translate(px,py);c.rotate(a+Math.PI/2);c.fillStyle='#ffffff';c.fillRect(-9,-7,18,14);c.fillStyle=officeRoles[i].color;c.fillRect(-9,-7,18,3);c.restore();}
+    if(v.status==='done'||(v.replay&&v.status!=='running')){c.fillStyle='#0d9488';c.font='700 13px "Segoe UI","Malgun Gothic",sans-serif';c.textAlign='center';c.fillText('회의 결론',TABLE.x,TABLE.y-26);
+      const out=v.stages.office?.output||{};c.fillStyle='#ffffff';c.font='12px "Segoe UI","Malgun Gothic",sans-serif';
       c.fillText(officeText('매수 승인 '+((out.approved_buys||[]).length)+'건 · 매도 승인 '+((out.approved_exits||[]).length)+'건',30),TABLE.x,TABLE.y-7);}
   }
   drawPerson(p){
@@ -314,17 +314,18 @@ class OfficeScene{
     if(lines.length<2&&cur)lines.push(cur);else if(cur&&lines.length===2)lines[1]=lines[1].slice(0,-1)+'…';
     const w=Math.max(...lines.map(l=>c.measureText(l).width))+20,h=lines.length*16+12;
     let bx=Math.max(8,Math.min(W-w-8,x-w/2)),by=y-h-12;
-    c.fillStyle=work?'rgba(18,28,46,.94)':'rgba(248,251,255,.97)';c.strokeStyle=color;c.lineWidth=1.5;
+    c.fillStyle=work?'rgba(240,253,250,.96)':'rgba(255,255,255,.98)';c.strokeStyle=color;c.lineWidth=1.5;
     c.beginPath();c.roundRect?c.roundRect(bx,by,w,h,9):c.rect(bx,by,w,h);c.fill();c.stroke();
     c.beginPath();c.moveTo(x-6,by+h);c.lineTo(x,by+h+8);c.lineTo(x+6,by+h);c.closePath();c.fill();
-    c.fillStyle=work?'#e2ebf8':'#152033';c.textAlign='left';c.textBaseline='middle';lines.forEach((l,i)=>c.fillText(l,bx+10,by+14+i*16));
+    c.fillStyle='#0f172a';c.textAlign='left';c.textBaseline='middle';lines.forEach((l,i)=>c.fillText(l,bx+10,by+14+i*16));
   }
   drawLabels(v){
     const c=this.ctx;
     for(const p of Object.values(this.people)){
       const y=(p.headY||p.y-70)-14;c.font='700 11px "Segoe UI","Malgun Gothic",sans-serif';const w=c.measureText(p.role.label).width+14;
-      if(!this.opt.compact||this.hover===p.role.id){c.fillStyle='rgba(10,16,28,.82)';c.beginPath();c.roundRect?c.roundRect(p.x-w/2,y-9,w,18,9):c.rect(p.x-w/2,y-9,w,18);c.fill();
-        c.fillStyle=p.role.color;c.textAlign='center';c.textBaseline='middle';c.fillText(p.role.label,p.x,y);}
+      if(!this.opt.compact||this.hover===p.role.id){c.fillStyle='rgba(255,255,255,.94)';c.beginPath();c.roundRect?c.roundRect(p.x-w/2,y-9,w,18,9):c.rect(p.x-w/2,y-9,w,18);c.fill();
+        c.strokeStyle=p.role.color;c.lineWidth=1;c.stroke();
+        c.fillStyle='#0f172a';c.textAlign='center';c.textBaseline='middle';c.fillText(p.role.label,p.x,y);}
     }
     // 작업 중 말풍선은 한 명만(가장 최근 단계), 회의 대화는 말하는 사람 한 명
     const running=v.status==='running'?officeRoles.filter(r=>this.people[r.id].status==='running'):[];

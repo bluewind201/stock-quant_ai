@@ -116,7 +116,7 @@ def collect(snapshot):
 def run(ai,snapshot,progress):
     from .paper_models import PortfolioPlan
     from .subscription_ai import compact_snapshot
-    deadline=time.monotonic()+720
+    deadline=time.monotonic()+900
     reports={};usage=[];steps=[];calls=0
     progress('collect','running',None)
     data=collect(snapshot)
@@ -125,6 +125,19 @@ def run(ai,snapshot,progress):
     for c in data.get('candidates',[]):
         key='market:'+c['symbol'];ids.add(key)
         c['market_evidence_id']=key
+    name_to_symbol={(c.get('name') or '').strip():c['symbol']
+                    for c in [*data.get('candidates',[]),*data.get('portfolio_policy',{}).get('held',[])]
+                    if c.get('name') and c.get('symbol')}
+    market_aliases={'MARKET','KR','US','KRX','KOSPI','KOSDAQ','NASDAQ','NYSE','AMEX','MACRO','INDEX','ALL','GLOBAL'}
+    def normalize_findings(rows):
+        for f in rows:
+            sym=str(f.get('symbol','')).strip()
+            if sym in name_to_symbol:
+                f['symbol']=name_to_symbol[sym]
+            elif sym.upper() in market_aliases:
+                f['symbol']='MARKET'
+            f['evidence_ids']=[f'market:{e}' if e not in ids and f'market:{e}' in ids else e
+                               for e in (f.get('evidence_ids') or [])]
     def validate_findings(rows):
         for f in rows:
             if f['symbol'] not in symbols and f['symbol']!='MARKET':raise AIError('AI 오피스가 후보 밖 종목을 인용했습니다.')
@@ -144,7 +157,7 @@ evidence_ids는 반드시 allowed_evidence_ids 목록(office_evidence.id 또는 
             calls+=1
             if role=='trader':
                 plan=ai._judge(PortfolioPlan,'분석팀·찬반 리서치를 검토해 국내(KR)·해외(US) 기간별(단기·중기·장기) 최적 매매 계획을 작성한다. 열린 슬롯(open_slots)과 조건 통과 후보(eligible_horizons)가 있으면 과도한 현금 방치 대신 위험조정 점수가 높은 후보를 적극 편입하되 급등 고점 추격은 배제한다. ',
-                               dict(data,office_reports=reports),min(180,left),'장전 판단',_lock_held=True)
+                               dict(data,office_reports=reports),min(240,left),'장전 판단',_lock_held=True)
                 plan=PortfolioPlan.model_validate(plan).model_dump()
                 output=plan
             else:
@@ -162,8 +175,9 @@ evidence_ids는 반드시 allowed_evidence_ids 목록(office_evidence.id 또는 
                 if role in ('research','risk'):payload['office_reports']=reports
                 if role=='risk':payload['trader_plan']=plan
                 output=ai._run(contract,common+instruction+'\n'+json.dumps(compact_snapshot(payload),ensure_ascii=False,allow_nan=False),
-                               min(75,left),label)
+                               min(150,left),label)
                 output=contract.model_validate(output).model_dump()
+                normalize_findings(output.get('findings',output.get('reasons',[])))
                 validate_findings(output.get('findings',output.get('reasons',[])))
                 if role=='risk':
                     if not set(output['approved_buys'])<={p['symbol'] for p in plan['picks']} or not set(output['approved_exits'])<={p['symbol'] for p in plan['exits']}:

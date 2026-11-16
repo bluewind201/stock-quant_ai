@@ -757,6 +757,8 @@ def apply_plan(service, state, plan, now):
     state['plan'] = dict(plan, picks=picks, decided_at=now.isoformat(), market_stance='normal' if picks else 'no_trade')
     state['phase'] = 'planned' if picks else 'monitoring'
     state['stamps']['plan'] = now.isoformat()
+    state['errors'].pop('scan_giveup', None)
+    state['errors'].pop('scan', None)
     kr_n = sum(1 for x in picks if not is_us_symbol(x['symbol']))
     us_n = sum(1 for x in picks if is_us_symbol(x['symbol']))
     mkt_desc = f'국내 {kr_n}·해외 {us_n}' if us_n else f'{len(picks)}개'
@@ -903,10 +905,17 @@ def tick(service, state, now):
     kr_open_day = calendar('KRX').is_session(now.astimezone(KST).date().isoformat()) and now.astimezone(KST).date().isoformat() not in {'2026-06-03', '2026-07-17'}
 
     # 1) 국내 장전·수동 스캔 및 정기 리뷰 (10:15, 12:00, 14:30 KST)
+    reviewed = state['events'].setdefault('portfolio_reviews', [])
+    if ('KR' in markets and kr_open_day and '09:00' <= hh < '09:10'
+            and not state.get('plan') and not state['ai'].get('pending')
+            and state['errors'].get('scan_giveup') and 'open_recovery_0900' not in reviewed):
+        reviewed.append('open_recovery_0900')
+        state['retry'] = {'attempts': 0, 'last': None}
+        state['errors'].pop('scan_giveup', None)
+
     if service._needs_plan(state, now):
         service._try_plan(state, now)
 
-    reviewed = state['events'].setdefault('portfolio_reviews', [])
     if 'KR' in markets and kr_open_day:
         slot = ('morning_1015' if '10:15' <= hh < '10:30' else
                 'midday' if '12:00' <= hh < '12:15' else

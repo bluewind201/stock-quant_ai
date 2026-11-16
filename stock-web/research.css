@@ -1,4 +1,4 @@
-/* Research & Selection Workspace · Dark Neural Quant Glass (v3.24.0) */
+/* Research & Selection Workspace · Luminous Quant Glass (v3.25.0) */
 .research-workspace {
   display: grid;
   gap: 16px;
@@ -12,11 +12,11 @@
   flex-wrap: wrap;
   padding: 20px 22px;
   border-radius: var(--radius, 14px);
-  border: 1px solid rgba(45, 212, 191, 0.24);
+  border: 1px solid rgba(13, 148, 136, 0.24);
   background:
-    radial-gradient(ellipse 65% 90% at 92% 10%, rgba(167, 139, 250, 0.14), transparent 60%),
-    radial-gradient(ellipse 60% 80% at 12% 100%, rgba(45, 212, 191, 0.10), transparent 60%),
-    linear-gradient(155deg, rgba(16, 27, 46, 0.94), rgba(10, 17, 30, 0.96));
+    radial-gradient(ellipse 65% 90% at 92% 10%, rgba(124, 58, 237, 0.08), transparent 60%),
+    radial-gradient(ellipse 60% 80% at 12% 100%, rgba(13, 148, 136, 0.08), transparent 60%),
+    linear-gradient(155deg, #ffffff, #f8fafc);
   box-shadow: var(--glass-highlight), var(--shadow);
 }
 .research-hero h1,
@@ -43,8 +43,8 @@
   padding: 14px 16px;
   border-radius: var(--radius-sm, 10px);
   border: 1px solid var(--line);
-  background: rgba(13, 22, 38, 0.84);
-  box-shadow: var(--glass-highlight);
+  background: #ffffff;
+  box-shadow: var(--shadow);
 }
 
 .research-layout {
@@ -69,13 +69,13 @@
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: rgba(11, 19, 34, 0.78);
+  background: #f8fafc;
 }
 .research-metrics > div strong {
   display: block;
   font-size: 20px;
   font-weight: 750;
-  color: #f5f9ff;
+  color: #0f172a;
   margin: 5px 0 3px;
   font-variant-numeric: tabular-nums;
 }
@@ -89,8 +89,8 @@
 .research-exit {
   padding: 14px 16px;
   border-radius: var(--radius-sm, 10px);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid #fde68a;
+  background: #fffbeb;
   color: var(--text);
 }
 
@@ -103,15 +103,15 @@
 .selection-card {
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid var(--line-glass, var(--line));
-  background: linear-gradient(155deg, rgba(16, 27, 45, 0.88), rgba(10, 17, 30, 0.94));
-  box-shadow: var(--glass-highlight);
+  border: 1px solid var(--line);
+  background: linear-gradient(155deg, #ffffff, #f8fafc);
+  box-shadow: var(--shadow);
   transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 .selection-card:hover {
-  border-color: rgba(45, 212, 191, 0.42);
+  border-color: rgba(13, 148, 136, 0.42);
   transform: translateY(-2px);
-  box-shadow: var(--glass-highlight), 0 8px 24px rgba(2, 6, 14, 0.45);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
 }
 .selection-card h3,
 .selection-card strong {
@@ -130,7 +130,7 @@
   padding: 16px 18px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(12, 21, 36, 0.86);
+  background: #ffffff;
 }
 .allocation-overview svg {
   width: 130px;
@@ -138,7 +138,7 @@
   display: block;
 }
 .allocation-overview svg circle:first-child {
-  stroke: rgba(148, 163, 184, 0.2);
+  stroke: #e2e8f0;
 }
 .research-workspace svg text {
   fill: var(--text);
@@ -168,7 +168,7 @@
   padding: 8px 10px;
   margin: 6px 0;
   border-radius: 8px;
-  background: rgba(9, 16, 29, 0.72);
+  background: #f8fafc;
   border: 1px solid var(--line);
 }
 .selected-stock p {

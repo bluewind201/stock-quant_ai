@@ -119,11 +119,16 @@ def _enrich(broker, entry: dict[str, Any], cfg) -> None:
     except Exception:  # noqa: BLE001
         entry['warnings'] = []
         entry['warnings_checked'] = False
-    news = krnews.stock_news(symbol, 5)
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=cfg['news_hours'])
-    entry['news'] = [n for n in news if not n['published_at']
-                     or datetime.fromisoformat(n['published_at']) >= cutoff]
-    entry['news_count'] = len(entry['news'])
+    try:
+        news = krnews.stock_news(symbol, 5)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=cfg['news_hours'])
+        entry['news'] = [n for n in news if not n['published_at']
+                         or datetime.fromisoformat(n['published_at']) >= cutoff]
+        entry['news_count'] = len(entry['news'])
+    except Exception:  # noqa: BLE001
+        entry['news'] = []
+        entry['news_count'] = 0
+        entry.setdefault('data_notes', []).append('뉴스 수집 실패: 일봉·가격 지표 기준 판단')
 
 
 def _score(entry: dict[str, Any]) -> float:

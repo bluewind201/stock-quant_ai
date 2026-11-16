@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -80,6 +81,19 @@ class CodexAI(SubscriptionAI):
                                         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             except (OSError, subprocess.SubprocessError):
                 raise AIError(f'{self.model} {label} 실행 실패/시간 초과. 이번 판단은 적용하지 않습니다.') from None
+            if result.returncode or not output.is_file():
+                combined = ((result.stdout or '') + '\n' + (getattr(result, 'stderr', '') or '')).strip()
+                if (not quota_error(combined) and combined and self.model != 'gpt-5.3-codex'
+                        and re.search(r'model|not[_ ]found|not[_ ]supported|unavailable|entitle|access|unknown|does not exist', combined, re.I)):
+                    fb_args = list(args)
+                    fb_args[fb_args.index('-m') + 1] = 'gpt-5.3-codex'
+                    try:
+                        result = subprocess.run(fb_args, input=prompt, capture_output=True, cwd=folder,
+                                                timeout=timeout, env=codex_env(), text=True,
+                                                encoding='utf-8', errors='replace',
+                                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                    except (OSError, subprocess.SubprocessError):
+                        raise AIError(f'{self.model} {label} 실행 실패/시간 초과. 이번 판단은 적용하지 않습니다.') from None
             if result.returncode or not output.is_file():
                 if quota_error((result.stdout or '') + '\n' + (getattr(result, 'stderr', '') or '')):
                     raise AIQuotaError('ChatGPT 구독 사용 한도에 도달했습니다.')

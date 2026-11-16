@@ -217,3 +217,113 @@ def test_dashboard_global_market_and_web_static_integrity(tmp_path, monkeypatch)
     missing = {f'{name}: {used}' for name, src in js_files.items()
                for used in re.findall(r"\$\('([A-Za-z0-9_-]+)'\)", src) if used not in present}
     assert not missing, missing
+
+
+def test_office_normalization_fallback_and_scan_giveup_clearing(tmp_path, monkeypatch):
+    # 1) ai_office normalizes Korean stock names, 'KOSPI' -> 'MARKET', and bare symbol evidence_ids
+    monkeypatch.setattr(ai_office.krnews, 'stock_news', lambda *a, **k: [])
+    monkeypatch.setattr(ai_office.krnews, 'search_news', lambda *a, **k: [])
+
+    class NormAI:
+        def __init__(self):
+            self.lock = threading.Lock()
+            self.last_usage = {}
+            self.provider = 'claude'
+            self.calls = 0
+
+        def _guard(self):
+            pass
+
+        def _run(self, contract, prompt, timeout=180, label=''):
+            self.calls += 1
+            self.last_usage = {'provider': 'claude', 'model': 'claude-sonnet-5'}
+            if contract == ai_office.RiskReview:
+                return {'summary': '승인', 'approved_buys': ['005930'], 'approved_exits': [],
+                        'reasons': [{'symbol': '삼성전자', 'positive': '추세 양호', 'negative': '변동성',
+                                     'evidence_ids': ['005930'], 'missing': []}]}
+            return {'summary': '검토 완료',
+                    'findings': [
+                        {'symbol': '삼성전자', 'positive': '수급 유입', 'negative': '단기 부담',
+                         'evidence_ids': ['005930'], 'missing': []},
+                        {'symbol': 'KOSPI', 'positive': '상승', 'negative': '경계',
+                         'evidence_ids': [], 'missing': []},
+                    ]}
+
+        def _judge(self, contract, prompt, snapshot, timeout=180, label='', _lock_held=False):
+            self.calls += 1
+            self.last_usage = {'provider': 'claude', 'model': 'claude-sonnet-5'}
+            return {'summary': '매수 계획', 'picks': [{
+                'symbol': '005930', 'horizon': 'long', 'max_entry_price': 65000,
+                'take_profit_pct': 12, 'stop_loss_pct': 4, 'weight_pct': 10,
+                'thesis': '확인된 일봉의 장기 추세가 안정적으로 유지됨',
+                'counter_case': '거시 충격으로 인한 단기 하락 변동성 확대 가능성',
+                'invalidation': '200일 이동평균선 또는 보호 가격 이탈 시 정리',
+            }]}
+
+    snap = {
+        'at': NOW.isoformat(), 'day': '2026-10-21', 'held': [],
+        'portfolio_policy': {'caps': {'short': 20, 'medium': 30, 'long': 30}},
+        'candidates': [{'symbol': '005930', 'name': '삼성전자', 'eligible_horizons': ['long'], 'news': []}],
+    }
+    office_res = ai_office.run(NormAI(), snap, lambda *a: None)
+    assert [p['symbol'] for p in office_res['picks']] == ['005930']
+
+    # 2) _ai_call falls back from failed plan_office to single-call fn(snapshot)
+    from sqt.subscription_ai import AIError
+    service, state = make_service(tmp_path, monkeypatch, markets=('KR',))
+    state['scan'] = {'candidates': [{
+        'symbol': '005930', 'name': '삼성전자', 'eligible_horizons': ['long'], 'market': 'KR',
+        'currency': 'KRW', 'exchange': 'KRX',
+        'portfolio': {'price': 60000, 'signals': {'long': {'eligible': True, 'stop_pct': 5.0}}},
+    }]}
+    state['errors']['scan_giveup'] = '장전 스캔·판단을 5번 시도했지만 실패했습니다'
+    service.store.put(service.account_kind, state['id'], state)
+
+    def fail_office(*a, **k):
+        raise AIError('AI 오피스 지연 실패')
+
+    service.ai.last_usage = {'provider': 'claude', 'model': 'claude-sonnet-5'}
+    service.ai.plan_office = fail_office
+    done = threading.Event()
+
+    def single_fn(s):
+        return {'summary': '단일 판단 전환', 'picks': [{
+            'symbol': '005930', 'horizon': 'long', 'max_entry_price': 62000,
+            'take_profit_pct': 12, 'stop_loss_pct': 5, 'weight_pct': 10,
+            'thesis': '단일 판단 자동 전환으로 장기 추세 편입',
+            'counter_case': '업황 둔화 및 지수 하락 동반 위험 존재',
+            'invalidation': '손절선 및 추세선 이탈 시 전량 정리',
+        }]}
+
+    def on_done(s, plan, now):
+        portfolio.apply_plan(service, s, plan, now)
+        done.set()
+
+    with service.lock:
+        service._ai_call(state, '장전 판단', single_fn, dict(snap, portfolio_policy={'style': 'growth', 'caps': {'short': 30, 'medium': 35, 'long': 25}}), on_done, fail_phase='scanned', counts=False)
+        service.store.put(service.account_kind, state['id'], state)
+    assert done.wait(5)
+    with service.lock:
+        view = service.view(state['id'])
+    assert view['plan'] and view['plan']['picks'][0]['symbol'] == '005930'
+    assert 'scan_giveup' not in view['errors']
+    assert view['office']['status'] == 'done'
+    assert '단일 장전 판단 자동 전환 완료' in view['office']['application']
+
+    # 3) scan_now and day rollover clear scan_giveup
+    with service.lock:
+        s2 = service.store.get(service.account_kind, state['id'])
+        s2['errors']['scan_giveup'] = 'old error'
+        service.store.put(service.account_kind, state['id'], s2)
+    res_ctrl = service.control(state['id'], 'scan_now')
+    assert 'scan_giveup' not in res_ctrl['errors']
+
+    with service.lock:
+        s3 = service.store.get(service.account_kind, state['id'])
+        s3['errors']['scan_giveup'] = 'prev day giveup'
+        s3['day'] = '2026-10-20'
+        service.store.put(service.account_kind, state['id'], s3)
+    monkeypatch.setattr(portfolio, 'tick', lambda *a: None)
+    service.tick(state['id'])
+    after_roll = service.store.get(service.account_kind, state['id'])
+    assert after_roll['day'] == '2026-10-21' and 'scan_giveup' not in after_roll['errors']
